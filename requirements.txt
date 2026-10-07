@@ -1,0 +1,4 @@
+# DeiLaw desktop dependencies
+PyQt6>=6.6
+requests>=2.31
+beautifulsoup4>=4.12
