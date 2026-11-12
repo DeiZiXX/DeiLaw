@@ -271,7 +271,8 @@ class BackupManager:
         "search_history.json",
         "ai_learning.jsonl",
         "training_dataset.jsonl",
-        "community_identity.json",
+        # Identity credentials and Cloud AI refresh tokens must NEVER enter
+        # ordinary plaintext user backups.
         "ahk_binds.json",
     )
 

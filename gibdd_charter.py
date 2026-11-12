@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import re
 import sys
+import socket
+import ipaddress
 import zipfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 
 import requests
 from bs4 import BeautifulSoup
@@ -21,6 +23,35 @@ from bs4 import BeautifulSoup
 
 _WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 _NS = {"w": _WORD_NS}
+MAX_CHARTER_DOWNLOAD = 8 * 1024 * 1024
+MAX_CHARTER_XML = 3 * 1024 * 1024
+MAX_CHARTER_UNPACKED = 24 * 1024 * 1024
+MAX_CHARTER_ZIP_MEMBERS = 300
+
+
+def _safe_docx_member(archive: zipfile.ZipFile, name: str) -> bytes:
+    members = archive.infolist()
+    if len(members) > MAX_CHARTER_ZIP_MEMBERS:
+        raise ValueError("Слишком много файлов внутри DOCX.")
+    if sum(item.file_size for item in members) > MAX_CHARTER_UNPACKED:
+        raise ValueError("Слишком большой распакованный DOCX.")
+    for item in members:
+        if item.flag_bits & 0x1 or item.file_size > MAX_CHARTER_UNPACKED:
+            raise ValueError("DOCX содержит запрещённый ZIP-элемент.")
+        if item.filename.startswith("/") or ".." in item.filename.split("/"):
+            raise ValueError("DOCX содержит небезопасный путь файла.")
+        if item.file_size > 10240 and item.file_size > max(1, item.compress_size) * 150:
+            raise ValueError("DOCX содержит подозрительное сжатие.")
+    info = archive.getinfo(name)
+    if info.file_size > MAX_CHARTER_XML or (
+        info.file_size > 10000 and
+        info.file_size > max(1, info.compress_size) * 150
+    ):
+        raise ValueError("DOCX содержит подозрительно большой или сжатый XML.")
+    data = archive.read(info)
+    if b"<!DOCTYPE" in data.upper() or b"<!ENTITY" in data.upper():
+        raise ValueError("DOCX содержит небезопасные XML-сущности.")
+    return data
 
 
 def _q(name: str) -> str:
@@ -68,15 +99,83 @@ def find_gibdd_charter(base_dir: Optional[Path] = None) -> Optional[Path]:
 
 
 def normalize_charter_url(url: str) -> str:
+    """Require HTTPS to a public DNS hostname; do not accept credentials or IP literals.
+
+    Redirect targets are checked independently by _fetch_public_charter().
+    """
     value = str(url or "").strip()
     if not value:
         raise ValueError("Введите ссылку на Устав.")
-    if not re.match(r"^https?://", value, re.I):
+    if "://" not in value:
         value = "https://" + value
-    parsed = urlparse(value)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc:
-        raise ValueError("Некорректная ссылка на Устав.")
+    try:
+        parsed = urlparse(value)
+        host = (parsed.hostname or "").rstrip(".").lower()
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("Некорректная ссылка на Устав.") from exc
+    if (parsed.scheme.lower() != "https" or not host or
+            parsed.username is not None or parsed.password is not None or
+            port not in (None, 443) or "\\" in value or
+            host == "localhost" or host.endswith((".localhost", ".local", ".internal"))):
+        raise ValueError("Разрешены только публичные HTTPS-ссылки без учётных данных.")
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    else:
+        raise ValueError("Ссылки на IP-адреса запрещены.")
     return value
+
+
+def _validate_public_dns(url: str) -> None:
+    """Reject local/private DNS targets before performing HTTP requests.
+
+    This is defense in depth, not DNS pinning: the host must still be
+    treated as untrusted when resolving redirects and in proxy environments.
+    """
+    host = urlparse(url).hostname
+    if not host:
+        raise ValueError("У ссылки отсутствует доменное имя.")
+    try:
+        records = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+    except OSError as exc:
+        raise ValueError("Не удалось проверить адрес сервера.") from exc
+    addresses = [item[4][0] for item in records]
+    if not addresses or any(not ipaddress.ip_address(item).is_global for item in addresses):
+        raise ValueError("Ссылка ведёт на локальный или служебный адрес.")
+
+
+def _fetch_public_charter(url: str, headers: dict) -> tuple[bytes, str, str]:
+    """Bound decoded download bytes and validate every HTTP redirect."""
+    current = normalize_charter_url(url)
+    for _ in range(5):
+        _validate_public_dns(current)
+        try:
+            with requests.get(current, headers=headers, timeout=(10, 30),
+                              stream=True, allow_redirects=False) as response:
+                if response.status_code in (301, 302, 303, 307, 308):
+                    location = response.headers.get("Location")
+                    if not location:
+                        raise ValueError("Переадресация без адреса назначения.")
+                    current = normalize_charter_url(urljoin(current, location))
+                    continue
+                response.raise_for_status()
+                declared = response.headers.get("Content-Length")
+                if declared and int(declared) > MAX_CHARTER_DOWNLOAD:
+                    raise ValueError("Слишком большой файл Устава (максимум 8 МБ).")
+                result = bytearray()
+                for part in response.iter_content(chunk_size=64 * 1024):
+                    if not part:
+                        continue
+                    if len(result) + len(part) > MAX_CHARTER_DOWNLOAD:
+                        raise ValueError("Слишком большой файл Устава (максимум 8 МБ).")
+                    result.extend(part)
+                encoding = response.encoding or "utf-8"
+                return bytes(result), response.headers.get("Content-Type", ""), encoding
+        except requests.RequestException as exc:
+            raise ValueError("Не удалось загрузить Устав по защищённому соединению.") from exc
+    raise ValueError("Слишком много перенаправлений при загрузке Устава.")
 
 
 def google_docs_export_url(url: str) -> Optional[str]:
@@ -84,7 +183,7 @@ def google_docs_export_url(url: str) -> Optional[str]:
     normalized = normalize_charter_url(url)
     parsed = urlparse(normalized)
     host = parsed.netloc.lower()
-    if "docs.google.com" not in host:
+    if host != "docs.google.com":
         return None
 
     match = re.search(r"/document/(?:u/\d+/)?d/([A-Za-z0-9_-]+)", parsed.path)
@@ -175,22 +274,7 @@ def download_gibdd_charter_url(
         ),
     }
 
-    try:
-        response = requests.get(
-            request_url,
-            headers=headers,
-            timeout=(10, 30),
-            allow_redirects=True,
-        )
-        response.raise_for_status()
-    except requests.RequestException as exc:
-        raise ValueError(
-            "Не удалось загрузить Устав по ссылке. "
-            f"Проверьте доступ к документу и интернет-соединение.\n{exc}"
-        ) from exc
-
-    content_type = response.headers.get("Content-Type", "")
-    data = response.content or b""
+    data, content_type, content_encoding = _fetch_public_charter(request_url, headers)
     parser = GibddCharterParser()
 
     # Google Docs export and direct DOCX links.
@@ -223,7 +307,7 @@ def download_gibdd_charter_url(
 
     # Ordinary web/forum page.
     try:
-        html = response.text
+        html = data.decode(content_encoding, errors="replace")
     except Exception as exc:
         raise ValueError(
             "Ссылка не является DOCX и страницу не удалось прочитать как текст."
@@ -353,11 +437,13 @@ class GibddCharterParser:
         )
 
     def _read_paragraphs(self, path: Path) -> list[str]:
+        if Path(path).stat().st_size > MAX_CHARTER_DOWNLOAD:
+            raise ValueError("Файл Устава слишком большой (максимум 8 МБ).")
         with zipfile.ZipFile(path) as archive:
-            document_root = ET.fromstring(archive.read("word/document.xml"))
+            document_root = ET.fromstring(_safe_docx_member(archive, "word/document.xml"))
             numbering_root = None
             try:
-                numbering_root = ET.fromstring(archive.read("word/numbering.xml"))
+                numbering_root = ET.fromstring(_safe_docx_member(archive, "word/numbering.xml"))
             except KeyError:
                 pass
 

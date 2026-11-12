@@ -1,0 +1,58 @@
+# Private ClamAV + HTTPS reverse proxy on a dedicated Linux VPS.
+# Set DEILAW_AV_DOMAIN and DEILAW_AV_SERVER_TOKEN in a local .env file.
+# Never put .env or secrets in a repository or ChatGPT attachment.
+services:
+  scanner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DEILAW_AV_HOST: "0.0.0.0"
+      DEILAW_AV_TRUSTED_INGRESS: "1"
+      DEILAW_AV_PORT: "10000"
+      DEILAW_AV_SERVER_TOKEN: "${DEILAW_AV_SERVER_TOKEN:?Set a random 64-character hex token}"
+      DEILAW_AV_DB_DIR: /var/lib/clamav
+      DEILAW_AV_MAX_SIGNATURE_HOURS: "48"
+    volumes:
+      - clamav_signatures:/var/lib/clamav
+    tmpfs:
+      - /tmp:size=256m,mode=1777,noexec,nosuid,nodev
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: 3g
+    networks:
+      - backend
+    # No host port: only Caddy in the Docker network can reach the scanner.
+    expose:
+      - "10000"
+
+  https:
+    image: caddy:2.10.0-alpine
+    restart: unless-stopped
+    depends_on:
+      - scanner
+    environment:
+      DEILAW_AV_DOMAIN: "${DEILAW_AV_DOMAIN:?Set your owned DNS name}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
+volumes:
+  clamav_signatures:
+  caddy_data:
+  caddy_config:

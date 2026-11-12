@@ -3,6 +3,7 @@ import hashlib
 import mimetypes
 import json
 import secrets
+import threading
 import sys
 import uuid
 from pathlib import Path
@@ -13,6 +14,7 @@ except ImportError:
     winreg = None
 
 import requests
+from cloud_auth import AnonymousSupabaseSession, CloudAuthError, WindowsTokenStore
 
 
 SUPABASE_URL = "https://ntizjwncrbokebjsfwgu.supabase.co"
@@ -43,6 +45,15 @@ class CommunityIdentity:
         self._device_material = self._read_device_material()
 
     def _load_or_create(self):
+        protected = WindowsTokenStore(self.path.with_suffix(".bin"))
+        if sys.platform == "win32":
+            saved = protected.load()
+            if (
+                isinstance(saved, dict)
+                and saved.get("installation_id")
+                and len(str(saved.get("installation_secret") or "")) >= 20
+            ):
+                return saved
         try:
             payload = json.loads(self.path.read_text(encoding="utf-8"))
             installation_id = str(payload.get("installation_id") or "").strip()
@@ -50,10 +61,16 @@ class CommunityIdentity:
                 payload.get("installation_secret") or ""
             ).strip()
             if installation_id and len(installation_secret) >= 20:
-                return {
+                existing = {
                     "installation_id": installation_id,
                     "installation_secret": installation_secret,
                 }
+                if sys.platform == "win32":
+                    # Migrate plaintext identity to Windows DPAPI without
+                    # changing credentials used by existing reports.
+                    protected.save(existing)
+                    self.path.unlink(missing_ok=True)
+                return existing
         except Exception:
             pass
 
@@ -61,11 +78,15 @@ class CommunityIdentity:
             "installation_id": str(uuid.uuid4()),
             "installation_secret": secrets.token_urlsafe(36),
         }
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        if sys.platform == "win32":
+            protected.save(payload)
+        else:
+            # Non-Windows developer/test compatibility only.
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
         return payload
 
     @staticmethod
@@ -144,20 +165,91 @@ class SupabaseCommunityClient:
         self.publishable_key = str(publishable_key or "").strip()
         self.identity = identity or CommunityIdentity()
         self.timeout = max(3, int(timeout))
+        self.auth = AnonymousSupabaseSession(
+            self.url, self.publishable_key,
+            store=WindowsTokenStore(self.identity.path.parent / "cloud_auth.bin"),
+        )
+        self._legacy_claim_done_for = None
+        self._legacy_claim_lock = threading.Lock()
 
     def _headers(self, prefer=None):
         headers = {
             "apikey": self.publishable_key,
+            "Authorization": f"Bearer {self.auth.access_token()}",
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "X-DeiLaw-Installation-Id": self.identity.installation_id,
-            "X-DeiLaw-Installation-Secret": self.identity.installation_secret,
-            "X-DeiLaw-Device-Id": self.identity.device_id,
-            "X-DeiLaw-Device-Secret": self.identity.device_secret,
         }
         if prefer:
             headers["Prefer"] = prefer
         return headers
+
+    def _owner_filter(self):
+        """Filter the user-facing lists by verified Supabase account UUID.
+
+        An admin's RLS policies can see other users' rows, so the UI must
+        explicitly restrict *my* lists rather than rely on a permissive
+        admin SELECT policy or the current PC's installation ID.
+        """
+        try:
+            self.auth.access_token()
+        except CloudAuthError as exc:
+            raise CommunityError(str(exc)) from exc
+        user = self.auth.session.get("user") or {}
+        uid = str(user.get("id") or "").strip()
+        if not uid:
+            raise CommunityError("Не удалось определить аккаунт DeiLaw. Войдите заново.")
+        return f"eq.{uid}"
+
+    def claim_legacy_feedback(self):
+        """Automatically import previous install-owned records after Discord login.
+
+        The server verifies the original random installation secret against a
+        stored hash and ensures the token has an actual Discord identity. Guest
+        sessions NEVER claim legacy data. Run this in a background worker.
+        """
+        empty = {"reviews": 0, "reports": 0, "messages": 0,
+                 "suggestions": 0, "review_conflicts": 0}
+        if self.auth.mode != "discord":
+            return dict(empty)
+        with self._legacy_claim_lock:
+            # Recheck the authenticated account each time, so switching from a
+            # guest or between Discord accounts cannot reuse stale claim state.
+            try:
+                headers = self._headers()
+                user = self.auth.session.get("user") or {}
+                uid = str(user.get("id") or "").strip()
+            except CloudAuthError as exc:
+                raise CommunityError(str(exc)) from exc
+            if not uid:
+                raise CommunityError("Не удалось определить Discord-аккаунт.")
+            if self._legacy_claim_done_for == uid:
+                return dict(empty)
+            try:
+                response = requests.post(
+                    f"{self.url}/rest/v1/rpc/deilaw_claim_legacy_ownership",
+                    headers=headers,
+                    json={
+                        "p_installation_id": self.identity.installation_id,
+                        "p_installation_secret": self.identity.installation_secret,
+                    },
+                    timeout=self.timeout,
+                )
+            except requests.RequestException as exc:
+                raise CommunityError("Не удалось восстановить старые отзывы и репорты.") from exc
+            if not response.ok:
+                raise CommunityError("Не удалось привязать старые данные: " + self._error_message(response))
+            try:
+                result = response.json()
+            except ValueError as exc:
+                raise CommunityError("Сервер вернул некорректный результат переноса.") from exc
+            if not isinstance(result, dict):
+                raise CommunityError("Сервер вернул некорректный результат переноса.")
+            self._legacy_claim_done_for = uid
+            return {key: max(0, int(result.get(key) or 0)) for key in empty}
+
+    def _ensure_legacy_claim(self):
+        """Safety net for requests made before the background claim finishes."""
+        return self.claim_legacy_feedback()
 
     @staticmethod
     def _error_message(response):
@@ -188,6 +280,11 @@ class SupabaseCommunityClient:
         if not self.url or not self.publishable_key:
             raise CommunityError("Supabase для DeiLaw не настроен.")
 
+        try:
+            if table != "deilaw_public_reviews":
+                self._ensure_legacy_claim()
+        except CloudAuthError as exc:
+            raise CommunityError(str(exc)) from exc
         url = f"{self.url}/rest/v1/{table.lstrip('/')}"
         try:
             response = requests.request(
@@ -198,6 +295,8 @@ class SupabaseCommunityClient:
                 json=payload,
                 timeout=self.timeout,
             )
+        except CloudAuthError as exc:
+            raise CommunityError(str(exc)) from exc
         except requests.RequestException as exc:
             raise CommunityError(
                 f"Не удалось связаться с сервером DeiLaw: {exc}"
@@ -219,9 +318,8 @@ class SupabaseCommunityClient:
     def _function_headers(self, content_type=None):
         headers = {
             "apikey": self.publishable_key,
+            "Authorization": f"Bearer {self.auth.access_token()}",
             "Accept": "application/json",
-            "X-DeiLaw-Installation-Id": self.identity.installation_id,
-            "X-DeiLaw-Installation-Secret": self.identity.installation_secret,
         }
         if content_type:
             headers["Content-Type"] = content_type
@@ -242,7 +340,10 @@ class SupabaseCommunityClient:
 
         query = {"action": action}
         query.update(dict(params or {}))
-        request_headers = self._function_headers()
+        try:
+            request_headers = self._function_headers()
+        except CloudAuthError as exc:
+            raise CommunityError(str(exc)) from exc
         request_headers.update(dict(headers or {}))
 
         try:
@@ -284,11 +385,11 @@ class SupabaseCommunityClient:
         if not path.is_file():
             raise CommunityError(f"Файл не найден: {path}")
 
-        allowed = {".png", ".jpg", ".jpeg", ".webp", ".txt", ".log", ".zip"}
+        allowed = {".png", ".jpg", ".jpeg", ".webp", ".txt", ".log"}
         suffix = path.suffix.lower()
         if suffix not in allowed:
             raise CommunityError(
-                "Поддерживаются PNG, JPG, WEBP, TXT, LOG и ZIP."
+                "Поддерживаются PNG, JPG, WEBP, TXT и LOG."
             )
 
         size = path.stat().st_size
@@ -362,9 +463,8 @@ class SupabaseCommunityClient:
     def fetch_reviews(self, limit=300):
         rows = self._request(
             "GET",
-            "reviews",
+            "deilaw_public_reviews",
             params={
-                "approved": "eq.true",
                 "select": (
                     "id,author_name,rating,review_text,app_version,"
                     "helpful_count,developer_reply,developer_reply_at,"
@@ -376,106 +476,66 @@ class SupabaseCommunityClient:
         )
         return rows if isinstance(rows, list) else []
 
-    def submit_review(
-        self,
-        *,
-        author_name,
-        rating,
-        review_text,
-        app_version,
-    ):
-        author_name = " ".join(str(author_name or "").split()).strip()
+    def require_discord_feedback(self):
+        """Only verified Discord sessions can submit public feedback/reports."""
+        if self.auth.mode != "discord":
+            raise CommunityError("Для отправки отзыва или репорта войдите через Discord.")
+        # Auth must verify token and refresh the user when needed.
+        try:
+            self.auth.access_token()
+        except CloudAuthError as exc:
+            raise CommunityError(str(exc)) from exc
+        if self.auth.mode != "discord":
+            raise CommunityError("Необходим действующий вход через Discord.")
+
+    def discord_display_name(self):
+        """UI-only display; the DB derives its own authoritative Discord name."""
+        if self.auth.mode != "discord":
+            return "Гость"
+        user = self.auth.session.get("user") or {}
+        for identity in user.get("identities") or []:
+            if isinstance(identity, dict) and identity.get("provider") == "discord":
+                info = identity.get("identity_data") or {}
+                for key in ("full_name", "name", "user_name"):
+                    value = " ".join(str(info.get(key) or "").split())
+                    if value:
+                        return value[:40]
+        info = user.get("user_metadata") or {}
+        for key in ("full_name", "name", "user_name"):
+            value = " ".join(str(info.get(key) or "").split())
+            if value:
+                return value[:40]
+        return "Discord"
+
+    def submit_review(self, *, rating, review_text, app_version):
+        self.require_discord_feedback()
         review_text = str(review_text or "").strip()
         rating = int(rating)
-
         if not 1 <= rating <= 5:
             raise CommunityError("Поставьте оценку от 1 до 5 звёзд.")
-        if not 1 <= len(author_name) <= 40:
-            raise CommunityError("Ник должен содержать от 1 до 40 символов.")
         if not 3 <= len(review_text) <= 2000:
-            raise CommunityError(
-                "Отзыв должен содержать от 3 до 2000 символов."
-            )
+            raise CommunityError("Отзыв должен содержать от 3 до 2000 символов.")
 
-        secure_payload = {
-            "installation_id": self.identity.installation_id,
-            "installation_secret_hash": self.identity.secret_hash,
-            "device_id": self.identity.device_id,
-            "device_secret_hash": self.identity.device_secret_hash,
-            "author_name": author_name,
+        # Identity and name MUST be derived from auth.identities by the DB.
+        # Do not send a client-editable author_name/device_id/installation_id.
+        data = {
             "rating": rating,
             "review_text": review_text,
-            "app_version": str(app_version or ""),
-            "approved": True,
+            "app_version": str(app_version or "")[:40],
         }
-
-        # First claim an old per-installation review, if one exists. This
-        # migrates existing users to the new one-review-per-Windows-PC rule
-        # without creating a second row for the same current installation.
-        try:
+        own_reviews = self._request(
+            "GET", "reviews",
+            params={"owner_uid": self._owner_filter(), "select": "id", "limit": "1"},
+        )
+        if isinstance(own_reviews, list) and own_reviews:
             self._request(
-                "PATCH",
-                "reviews",
-                params={
-                    "installation_id": (
-                        f"eq.{self.identity.installation_id}"
-                    ),
-                    "device_id": "is.null",
-                },
-                payload={
-                    "device_id": self.identity.device_id,
-                    "device_secret_hash": self.identity.device_secret_hash,
-                },
+                "PATCH", "reviews",
+                params={"id": f"eq.{own_reviews[0]['id']}"},
+                payload=data,
                 prefer="return=minimal",
             )
-        except CommunityError as exc:
-            lowered = str(exc).lower()
-            # The migration may not have been run yet. In that case keep
-            # compatibility with the old installation-based schema below.
-            if (
-                "device_id" not in lowered
-                and "device_secret_hash" not in lowered
-                and "schema cache" not in lowered
-            ):
-                # A unique conflict here means this PC already owns another
-                # review. The device upsert below will update that row.
-                if "duplicate" not in lowered and "unique" not in lowered:
-                    raise
-
-        params = {
-            "on_conflict": "device_id",
-        }
-
-        try:
-            self._request(
-                "POST",
-                "reviews",
-                params=params,
-                payload=secure_payload,
-                prefer="resolution=merge-duplicates,return=minimal",
-            )
             return
-        except CommunityError as exc:
-            lowered = str(exc).lower()
-            if (
-                "device_id" not in lowered
-                and "device_secret_hash" not in lowered
-                and "schema cache" not in lowered
-            ):
-                raise
-
-        # Compatibility fallback until SUPABASE_SETUP.sql is re-run. Once the
-        # device columns exist, the branch above is always used.
-        legacy_payload = dict(secure_payload)
-        legacy_payload.pop("device_id", None)
-        legacy_payload.pop("device_secret_hash", None)
-        self._request(
-            "POST",
-            "reviews",
-            params={"on_conflict": "installation_id"},
-            payload=legacy_payload,
-            prefer="resolution=merge-duplicates,return=minimal",
-        )
+        self._request("POST", "reviews", payload=data, prefer="return=minimal")
 
     def submit_suggestion(
         self,
@@ -524,6 +584,7 @@ class SupabaseCommunityClient:
             "GET",
             "suggestions",
             params={
+                "owner_uid": self._owner_filter(),
                 "select": (
                     "id,suggestion_number,author_name,category,title,"
                     "suggestion_text,app_version,status,developer_reply,"
@@ -536,9 +597,8 @@ class SupabaseCommunityClient:
         return rows if isinstance(rows, list) else []
 
     def submit_bug_report(self, report):
+        self.require_discord_feedback()
         payload = {
-            "installation_id": self.identity.installation_id,
-            "installation_secret_hash": self.identity.secret_hash,
             "category": str(report.get("category") or "Другое")[:50],
             "title": str(report.get("title") or "").strip()[:150],
             "description": str(report.get("description") or "").strip()[:5000],
@@ -574,28 +634,10 @@ class SupabaseCommunityClient:
         if len(payload["description"]) < 3:
             raise CommunityError("Опишите, что произошло.")
 
-        inserted = None
-
-        try:
-            inserted = self._request(
-                "POST",
-                "bug_reports",
-                payload=payload,
-                prefer="return=representation",
-            )
-        except CommunityError as exc:
-            if "installation_secret_hash" not in str(exc):
-                raise
-
-            # Compatibility with the earliest schema.
-            legacy_payload = dict(payload)
-            legacy_payload.pop("installation_secret_hash", None)
-            inserted = self._request(
-                "POST",
-                "bug_reports",
-                payload=legacy_payload,
-                prefer="return=representation",
-            )
+        inserted = self._request(
+            "POST", "bug_reports", payload=payload,
+            prefer="return=representation",
+        )
 
         row = (
             inserted[0]
@@ -624,7 +666,7 @@ class SupabaseCommunityClient:
             "GET",
             "bug_reports",
             params={
-                "installation_id": f"eq.{self.identity.installation_id}",
+                "owner_uid": self._owner_filter(),
                 "select": (
                     "id,report_number,category,title,description,"
                     "reproduce_steps,expected_result,app_version,status,"
@@ -657,16 +699,17 @@ class SupabaseCommunityClient:
 
 
     def fetch_developer_report_messages(self, limit=120):
-        """Return recent developer replies visible to the current installation.
+        """Return recent developer replies owned by the current account.
 
-        RLS already restricts bug_report_messages to this DeiLaw installation,
-        so no report-by-report requests are required for background notifications.
+        The explicit owner filter also avoids showing every user's replies
+        when a developer signs into the user-facing DeiLaw app.
         """
         rows = self._request(
             "GET",
             "bug_report_messages",
             params={
                 "sender": "eq.developer",
+                "owner_uid": self._owner_filter(),
                 "select": (
                     "id,report_id,sender,message,created_at"
                 ),

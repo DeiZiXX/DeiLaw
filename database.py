@@ -171,13 +171,13 @@ class LawDatabase:
     def search_laws(self, query):
         cursor = self.connection.cursor()
 
-        search = f"%{query}%"
+        search = "%" + str(query).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
         cursor.execute("""
             SELECT *
             FROM laws
-            WHERE title LIKE ?
-               OR content LIKE ?
+            WHERE title LIKE ? ESCAPE '\\'
+               OR content LIKE ? ESCAPE '\\'
             ORDER BY title
         """, (
             search,
@@ -401,7 +401,7 @@ class LawDatabase:
     def search_articles(self, query, limit=50):
         cursor = self.connection.cursor()
 
-        search = f"%{query}%"
+        search = "%" + str(query).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
         cursor.execute("""
             SELECT
@@ -417,9 +417,9 @@ class LawDatabase:
                 ON laws.id = articles.law_id
 
             WHERE
-                articles.article_number LIKE ?
-                OR articles.title LIKE ?
-                OR articles.content LIKE ?
+                articles.article_number LIKE ? ESCAPE '\\'
+                OR articles.title LIKE ? ESCAPE '\\'
+                OR articles.content LIKE ? ESCAPE '\\'
 
             ORDER BY
                 laws.title,

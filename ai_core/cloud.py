@@ -5,6 +5,7 @@ from typing import Iterable
 import requests
 
 from app_version import APP_VERSION
+from cloud_auth import AnonymousSupabaseSession, CloudAuthError, WindowsTokenStore
 from community_client import CommunityIdentity, SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL
 
 
@@ -33,6 +34,11 @@ class CloudAIClient:
         self.url = str(url or "").rstrip("/")
         self.publishable_key = str(publishable_key or "").strip()
         self.identity = identity or CommunityIdentity("data/community_identity.json")
+        self.auth = AnonymousSupabaseSession(
+            self.url,
+            self.publishable_key,
+            store=WindowsTokenStore(self.identity.path.parent / "cloud_auth.bin"),
+        )
         self.timeout = max(20, int(timeout))
 
     @property
@@ -42,10 +48,9 @@ class CloudAIClient:
     def _headers(self) -> dict[str, str]:
         return {
             "apikey": self.publishable_key,
+            "Authorization": f"Bearer {self.auth.access_token()}",
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "X-DeiLaw-Installation-Id": self.identity.installation_id,
-            "X-DeiLaw-Device-Id": self.identity.device_id,
             "X-DeiLaw-App-Version": APP_VERSION,
         }
 
@@ -82,6 +87,8 @@ class CloudAIClient:
                 params={"health": "1"},
                 timeout=max(2, int(timeout)),
             )
+        except CloudAuthError as exc:
+            return {"ok": False, "error": str(exc)}
         except requests.RequestException as exc:
             return {"ok": False, "error": f"Нет связи с Cloud AI: {exc}"}
         try:
@@ -123,6 +130,8 @@ class CloudAIClient:
                 json=payload,
                 timeout=self.timeout,
             )
+        except CloudAuthError as exc:
+            raise CloudAIError(str(exc)) from exc
         except requests.Timeout as exc:
             raise CloudAIError(
                 "Cloud AI слишком долго отвечает. Проверьте интернет и повторите запрос."

@@ -1,0 +1,12 @@
+DeiLaw 0.3.5rc9 SECURITY HARDENING — SOURCE RELEASE
+
++ Public HTTPS checks and streamed 8MiB cap for charter download
++ DOCX total-size, compression and path sanity guards
++ Downloaded installer filename/origin/size/hash checks
++ No unsupervised installer execution; signing key not yet provisioned
++ Cloud AI production v9 with privacy-safe error logs and timeout
++ Attachment upload production v3 signature sniffing; ZIP uploads disabled
++ Per-account 24h quotas for reports/messages/suggestions, live rollback tests
++ Extra regression tests; Support Center 0.2.4 traceback credential redaction
+
+This archive is not a complete certified security release. See SECURITY_STATUS_20261112.md.

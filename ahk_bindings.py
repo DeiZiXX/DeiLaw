@@ -15,7 +15,8 @@ class AHKBindStore:
     def _defaults():
         return {
             "chat_key": "t",
-            "open_chat_delay": 140,
+            "open_chat_delay": 250,
+            "close_chat_after_send": False,
             "bindings": [],
         }
 
@@ -30,14 +31,17 @@ class AHKBindStore:
 
         if not isinstance(defaults.get("bindings"), list):
             defaults["bindings"] = []
+        defaults["close_chat_after_send"] = bool(
+            defaults.get("close_chat_after_send", False)
+        )
         defaults["chat_key"] = str(defaults.get("chat_key") or "t").strip() or "t"
         try:
             defaults["open_chat_delay"] = max(
                 40,
-                min(3000, int(defaults.get("open_chat_delay", 140))),
+                min(3000, int(defaults.get("open_chat_delay", 250))),
             )
         except Exception:
-            defaults["open_chat_delay"] = 140
+            defaults["open_chat_delay"] = 250
         return defaults
 
     def save(self):
@@ -116,11 +120,13 @@ class AHKBindStore:
             self.save()
         return changed
 
-    def set_script_options(self, *, chat_key, open_chat_delay):
+    def set_script_options(self, *, chat_key, open_chat_delay, close_chat_after_send=None):
         chat_key = str(chat_key or "").strip() or "t"
-        delay = max(40, min(3000, int(open_chat_delay)))
+        delay = max(250, min(3000, int(open_chat_delay)))
         self.data["chat_key"] = chat_key
         self.data["open_chat_delay"] = delay
+        if close_chat_after_send is not None:
+            self.data["close_chat_after_send"] = bool(close_chat_after_send)
         self.save()
 
     @staticmethod
@@ -252,7 +258,8 @@ class AHKBindStore:
 
     def generate_script(self):
         chat_key = str(self.data.get("chat_key") or "t").strip() or "t"
-        open_delay = max(40, min(3000, int(self.data.get("open_chat_delay", 140))))
+        open_delay = max(250, min(3000, int(self.data.get("open_chat_delay", 250))))
+        close_chat = bool(self.data.get("close_chat_after_send", False))
         bindings = [item for item in self.bindings() if item.get("enabled", True)]
 
         lines = [
@@ -278,7 +285,14 @@ class AHKBindStore:
                 lines.append(f"    {self._chat_send_line(chat_key)}")
                 lines.append(f"    Sleep {open_delay}")
                 lines.append(f'    SendText "{self._escape_ahk_string(command)}"')
+                lines.append("    Sleep 180")
                 lines.append('    Send "{Enter}"')
+                if close_chat:
+                    lines.extend([
+                        "    Sleep 250",
+                        '    Send "{Esc}"',
+                        "    Sleep 150",
+                    ])
                 if delay_ms:
                     lines.append(f"    Sleep {delay_ms}")
             lines.append("}")

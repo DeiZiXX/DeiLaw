@@ -1,5 +1,18 @@
 -- DeiLaw Community / Bug Reports / Reviews
 -- Run this file in Supabase -> SQL Editor. It is safe to run again after DeiLaw updates.
+-- SECURITY: THIS IS LEGACY BOOTSTRAP ONLY. Apply SUPABASE_SECURITY_HARDENING.sql
+-- immediately afterwards. Do not run this file on a hardened live project.
+
+do $$
+begin
+    if exists (
+        select 1 from information_schema.columns
+         where table_schema = 'public' and table_name = 'reviews'
+           and column_name = 'owner_uid'
+    ) then
+        raise exception 'Legacy setup would undo secure RLS. Do not re-run it after security hardening.';
+    end if;
+end $$;
 
 create extension if not exists pgcrypto;
 
@@ -12,7 +25,7 @@ create table if not exists public.reviews (
     review_text text not null,
     app_version text not null,
     helpful_count integer not null default 0,
-    approved boolean not null default true,
+    approved boolean not null default false,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
 );
@@ -136,8 +149,7 @@ using (
             ''
         )
     and (
-        installation_secret_hash is null
-        or installation_secret_hash =
+        installation_secret_hash =
             encode(
                 digest(
                     coalesce(
@@ -226,8 +238,7 @@ using (
             ''
         )
     and (
-        installation_secret_hash is null
-        or installation_secret_hash =
+        installation_secret_hash =
             encode(
                 digest(
                     coalesce(
@@ -452,8 +463,7 @@ using (
             ''
         )
     and (
-        installation_secret_hash is null
-        or installation_secret_hash =
+        installation_secret_hash =
             encode(
                 digest(
                     coalesce(
@@ -481,8 +491,7 @@ with check (
             ''
         )
     and (
-        installation_secret_hash is null
-        or installation_secret_hash =
+        installation_secret_hash =
             encode(
                 digest(
                     coalesce(
@@ -622,8 +631,7 @@ using (
                 ''
             )
         and (
-            installation_secret_hash is null
-            or installation_secret_hash =
+            installation_secret_hash =
                 encode(
                     digest(
                         coalesce(

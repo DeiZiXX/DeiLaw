@@ -64,7 +64,10 @@ from ai_core.cloud import CloudAIClient
 from app_version import APP_VERSION
 from user_state import ProfileStore, BackupManager
 from ahk_bindings import AHKBindStore
+from rp_macro_input import MacroDeliveryError, send_rp_chat_lines
 from community_client import CommunityIdentity, SupabaseCommunityClient, CommunityError
+from cloud_auth import restart_deilaw_for_login_choice
+from update_preferences import normalize_update_mode, update_action
 from updater import (
     UpdateCheckWorker,
     UpdateDownloadWorker,
@@ -74,6 +77,33 @@ from updater import (
     load_update_config,
     update_is_configured,
 )
+
+
+class AccountStatusButton(QPushButton):
+    """A compact, keyboard-accessible account button for narrow sidebars."""
+
+    def __init__(self, label, parent=None):
+        super().__init__(parent)
+        self.full_label = label
+        self.setMinimumWidth(0)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setToolTip(label + " — управление аккаунтом")
+        self.refresh_label()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.refresh_label()
+
+    def refresh_label(self):
+        # Reserve space for the dropdown arrow and the button's padding.
+        available = max(24, self.contentsRect().width() - 45)
+        shortened = self.fontMetrics().elidedText(
+            self.full_label, Qt.TextElideMode.ElideRight, available
+        )
+        # Qt interprets '&' as a keyboard mnemonic; Discord names are literal.
+        self.setText(f"{shortened.replace('&', '&&')}  ▾")
+
+
 try:
     from gibdd_charter import (
         find_gibdd_charter,
@@ -512,6 +542,7 @@ class WindowsHotkeyFilter(QAbstractNativeEventFilter):
 
 
 class DeiLawWindow(QMainWindow):
+    ahk_runtime_status_signal = pyqtSignal(str)
 
     def __init__(self, startup_callback=None):
         super().__init__()
@@ -604,6 +635,8 @@ class DeiLawWindow(QMainWindow):
         self.ahk_runtime_busy = False
         self.ahk_runtime_lock = threading.Lock()
         self.ahk_runtime_last_summary = ""
+        self.ahk_runtime_last_event = ""
+        self.ahk_runtime_status_signal.connect(self._on_ahk_runtime_status)
         self.community_identity = CommunityIdentity(
             "data/community_identity.json"
         )
@@ -991,7 +1024,7 @@ class DeiLawWindow(QMainWindow):
         self.update_program_update_monitor_state()
 
     def update_program_update_monitor_state(self):
-        """Program auto-update is an always-on DeiLaw system function."""
+        """Keep checking for signed releases; installation mode is configurable."""
         self.app_settings["auto_check_program_updates"] = True
 
         if hasattr(self, "settings_auto_program_updates"):
@@ -1107,17 +1140,26 @@ class DeiLawWindow(QMainWindow):
         )
 
         if not manual:
-            # New release found during normal work: update without asking.
-            if (
-                self.program_update_download_worker is not None
-                and self.program_update_download_worker.isRunning()
-            ):
+            action = update_action(self.app_settings.get("update_install_mode"))
+            if action == "install":
+                if (
+                    self.program_update_download_worker is not None
+                    and self.program_update_download_worker.isRunning()
+                ):
+                    return
+                self.download_program_update(info, automatic=True)
                 return
-            self.download_program_update(
-                info,
-                automatic=True,
-            )
-            return
+            if action == "notify":
+                if version != self.last_program_update_prompt_version:
+                    self.last_program_update_prompt_version = version
+                    if self.system_tray_icon is not None:
+                        self.system_tray_icon.showMessage(
+                            "Обновление DeiLaw",
+                            f"Доступна версия {version}. Откройте настройки DeiLaw для установки.",
+                            QSystemTrayIcon.MessageIcon.Information,
+                            6000,
+                        )
+                return
 
         # An automatic poll runs every three minutes. If the user already chose
         # "Позже", do not hammer them with the same dialog on every poll.
@@ -1384,7 +1426,7 @@ class DeiLawWindow(QMainWindow):
                 )
 
             helper = create_update_install_helper(
-                installer_path
+                installer_path, self.program_update_info
             )
             launch_update_helper(helper)
         except Exception as exc:
@@ -1544,7 +1586,24 @@ class DeiLawWindow(QMainWindow):
 
         sidebar_layout.addWidget(logo)
         sidebar_layout.addWidget(description)
-        sidebar_layout.addSpacing(25)
+        auth_mode = self.community_client.auth.mode
+        auth_user = self.community_client.auth.session.get("user") or {}
+        auth_profile = auth_user.get("user_metadata") or {}
+        if auth_mode == "discord":
+            display_name = str(
+                auth_profile.get("full_name") or auth_profile.get("name") or
+                auth_profile.get("user_name") or "Discord"
+            )[:24]
+            account_text = f"Discord: {display_name}"
+        else:
+            account_text = "Гостевой режим"
+        self.account_button = AccountStatusButton(account_text)
+        self.account_button.setObjectName("accountStatus")
+        self.account_button.setFixedHeight(39)
+        self.account_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.account_button.clicked.connect(self.show_account_actions)
+        sidebar_layout.addWidget(self.account_button)
+        sidebar_layout.addSpacing(8)
 
         self.search_nav = self.nav_button("🔎  Поиск")
         self.laws_nav = self.nav_button("📚  Законы")
@@ -3830,6 +3889,7 @@ class DeiLawWindow(QMainWindow):
             "law_update_interval_hours": 6,
             "last_auto_law_update_at": 0,
             "update_channel": load_update_config().get("channel", "stable"),
+            "update_install_mode": "confirm",
             "last_seen_law_update_run": 0,
             # User-selected DOCX; the file can live anywhere on disk.
             "gibdd_charter_path": "",
@@ -4572,7 +4632,7 @@ class DeiLawWindow(QMainWindow):
         update_program_layout.addWidget(update_program_title)
 
         self.settings_auto_program_updates = StatusCheckBox(
-            "Автоматическое обновление всегда включено"
+            "Автоматически проверять наличие обновлений"
         )
         self.settings_auto_program_updates.setChecked(True)
         self.settings_auto_program_updates.setEnabled(False)
@@ -4606,6 +4666,31 @@ class DeiLawWindow(QMainWindow):
         )
         channel_row.addWidget(self.settings_update_channel)
         update_program_layout.addLayout(channel_row)
+
+        install_mode_row = QHBoxLayout()
+        install_mode_row.addWidget(QLabel("Установка обновлений"))
+        install_mode_row.addStretch()
+        self.settings_update_install_mode = QComboBox()
+        self.settings_update_install_mode.addItem("Автоматически", "auto")
+        self.settings_update_install_mode.addItem("Спрашивать перед установкой", "confirm")
+        self.settings_update_install_mode.addItem("Только уведомлять", "notify")
+        selected_mode = normalize_update_mode(
+            self.app_settings.get("update_install_mode")
+        )
+        mode_index = self.settings_update_install_mode.findData(selected_mode)
+        self.settings_update_install_mode.setCurrentIndex(max(0, mode_index))
+        self.settings_update_install_mode.setToolTip(
+            "Автоматическая установка допускается только для официального "
+            "обновления с проверенной криптографической подписью."
+        )
+        install_mode_row.addWidget(self.settings_update_install_mode)
+        update_program_layout.addLayout(install_mode_row)
+        signed_hint = QLabel(
+            "Без настроенного ключа подписи релиза автоматическая установка заблокирована."
+        )
+        signed_hint.setObjectName("muted")
+        signed_hint.setWordWrap(True)
+        update_program_layout.addWidget(signed_hint)
 
         program_update_row = QHBoxLayout()
         self.settings_program_version_label = QLabel(
@@ -4815,6 +4900,7 @@ class DeiLawWindow(QMainWindow):
             self.settings_auto_law_updates,
             self.settings_law_update_interval,
             self.settings_update_channel,
+            self.settings_update_install_mode,
         ]
         for widget in dirty_widgets:
             if isinstance(widget, QCheckBox):
@@ -4879,6 +4965,9 @@ class DeiLawWindow(QMainWindow):
             ),
             "update_channel": (
                 self.settings_update_channel.currentData() or "stable"
+            ),
+            "update_install_mode": normalize_update_mode(
+                self.settings_update_install_mode.currentData()
             ),
             "memo_always_on_top": self.settings_topmost.isChecked(),
             "overlay_click_through": self.settings_click_through.isChecked(),
@@ -5588,6 +5677,9 @@ class DeiLawWindow(QMainWindow):
             "update_channel": (
                 self.settings_update_channel.currentData() or "stable"
             ),
+            "update_install_mode": normalize_update_mode(
+                self.settings_update_install_mode.currentData()
+            ),
             "close_behavior": remembered_close_behavior,
             "remember_close_choice": remember_close_choice,
         })
@@ -5673,6 +5765,8 @@ class DeiLawWindow(QMainWindow):
         self.settings_ui_sounds.setChecked(True)
         self.settings_report_reply_voice.setChecked(True)
         self.settings_auto_program_updates.setChecked(True)
+        mode_index = self.settings_update_install_mode.findData("confirm")
+        self.settings_update_install_mode.setCurrentIndex(max(0, mode_index))
         self.settings_auto_law_updates.setChecked(True)
         law_default_index = self.settings_law_update_interval.findData(6)
         self.settings_law_update_interval.setCurrentIndex(max(0, law_default_index))
@@ -5927,7 +6021,25 @@ class DeiLawWindow(QMainWindow):
             return None
         return max(existing, key=lambda path: path.stat().st_mtime)
 
+    def _allow_discord_feedback_dialog(self):
+        if self.community_client.auth.mode == "discord":
+            return True
+        decision = QMessageBox.question(
+            self,
+            "Вход через Discord",
+            "Чтобы отправить отзыв или репорт, войдите через Discord. "
+            "Ник автоматически берётся из вашего Discord-профиля. "
+            "Войти сейчас?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if decision == QMessageBox.StandardButton.Yes:
+            self.open_discord_account_login()
+        return False
+
     def show_bug_report_dialog(self):
+        if not self._allow_discord_feedback_dialog():
+            return
         dialog = QDialog(self)
         dialog.setWindowTitle("Сообщить о проблеме — DeiLaw")
         dialog.resize(820, 790)
@@ -5948,6 +6060,13 @@ class DeiLawWindow(QMainWindow):
         hint.setObjectName("muted")
         hint.setWordWrap(True)
         layout.addWidget(hint)
+
+        reporter = QLabel(
+            f"Отправитель Discord: {self.community_client.discord_display_name()}"
+        )
+        reporter.setObjectName("muted")
+        reporter.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(reporter)
 
         category_row = QHBoxLayout()
         category_row.addWidget(QLabel("Категория"))
@@ -5998,7 +6117,11 @@ class DeiLawWindow(QMainWindow):
         include_logs = QCheckBox(
             "Приложить последние строки технического лога"
         )
-        include_logs.setChecked(True)
+        include_logs.setChecked(False)
+        include_logs.setToolTip(
+            "В логах могут быть личные пути и другие данные. "
+            "Отправляйте их только при необходимости."
+        )
         layout.addWidget(include_logs)
 
         attachment_paths = []
@@ -6008,7 +6131,7 @@ class DeiLawWindow(QMainWindow):
 
         attachments_list = QListWidget()
         attachments_list.setMaximumHeight(92)
-        attachments_list.setToolTip("PNG, JPG, WEBP, TXT, LOG или ZIP")
+        attachments_list.setToolTip("PNG, JPG, WEBP, TXT или LOG")
         layout.addWidget(attachments_list)
 
         attachment_buttons = QHBoxLayout()
@@ -6037,8 +6160,8 @@ class DeiLawWindow(QMainWindow):
             if not path.is_file():
                 status.setText(f"Файл не найден: {path}")
                 return
-            if path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".txt", ".log", ".zip"}:
-                status.setText("Поддерживаются PNG, JPG, WEBP, TXT, LOG и ZIP.")
+            if path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".txt", ".log"}:
+                status.setText("Поддерживаются PNG, JPG, WEBP, TXT и LOG.")
                 return
             if path.stat().st_size > 10 * 1024 * 1024:
                 status.setText(f"{path.name}: файл больше 10 МБ.")
@@ -6058,7 +6181,7 @@ class DeiLawWindow(QMainWindow):
                 dialog,
                 "Вложения к репорту",
                 "",
-                "Поддерживаемые файлы (*.png *.jpg *.jpeg *.webp *.txt *.log *.zip);;Все файлы (*)",
+                "Поддерживаемые файлы (*.png *.jpg *.jpeg *.webp *.txt *.log);;Все файлы (*)",
             )
             for path in paths:
                 append_attachment(path)
@@ -6633,6 +6756,15 @@ class DeiLawWindow(QMainWindow):
                     pass
         self.ahk_runtime_hotkeys = []
 
+    def _on_ahk_runtime_status(self, message):
+        """Show runtime diagnostics without touching Qt widgets from a worker."""
+        self.ahk_runtime_last_event = str(message)
+        if hasattr(self, "ahk_status_label"):
+            self.ahk_status_label.setText(
+                f"{self.ahk_runtime_last_summary}\n"
+                f"Последняя попытка: {self.ahk_runtime_last_event}"
+            )
+
     def install_ahk_runtime_hotkeys(self):
         """Register enabled RP binds so they work directly from DeiLaw."""
         self.unregister_ahk_runtime_hotkeys()
@@ -6726,7 +6858,9 @@ class DeiLawWindow(QMainWindow):
             return False
 
         INPUT_KEYBOARD = 1
+        KEYEVENTF_EXTENDEDKEY = 0x0001
         KEYEVENTF_KEYUP = 0x0002
+        KEYEVENTF_SCANCODE = 0x0008
 
         ULONG_PTR = ctypes.c_size_t
 
@@ -6770,17 +6904,38 @@ class DeiLawWindow(QMainWindow):
                 ("u", INPUTUNION),
             ]
 
+        # Games commonly look for physical scan codes and may miss a key that
+        # is pressed and released within one SendInput call.
+        scan = int(ctypes.windll.user32.MapVirtualKeyW(int(vk), 0))
+        extended = int(vk) in {
+            0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28,
+            0x2D, 0x2E, 0x6F, 0xA3, 0xA5,
+        }
+        flags = KEYEVENTF_SCANCODE if scan else 0
+        if scan and extended:
+            flags |= KEYEVENTF_EXTENDEDKEY
         events = (INPUT * 2)()
         events[0].type = INPUT_KEYBOARD
-        events[0].ki = KEYBDINPUT(vk, 0, 0, 0, 0)
+        events[0].ki = KEYBDINPUT(0 if scan else vk, scan, flags, 0, 0)
         events[1].type = INPUT_KEYBOARD
-        events[1].ki = KEYBDINPUT(vk, 0, KEYEVENTF_KEYUP, 0, 0)
-        sent = ctypes.windll.user32.SendInput(
-            2,
-            ctypes.byref(events),
+        events[1].ki = KEYBDINPUT(
+            0 if scan else vk, scan, flags | KEYEVENTF_KEYUP, 0, 0
+        )
+        first = ctypes.windll.user32.SendInput(
+            1,
+            ctypes.byref(events[0]),
             ctypes.sizeof(INPUT),
         )
-        return int(sent) == 2
+        if first:
+            # The chat submit key needs a longer hold than a normal shortcut:
+            # some games otherwise process the text but miss Enter itself.
+            time.sleep(0.100 if int(vk) == 0x0D else 0.045)
+        second = ctypes.windll.user32.SendInput(
+            1,
+            ctypes.byref(events[1]),
+            ctypes.sizeof(INPUT),
+        )
+        return int(first) == 1 and int(second) == 1
 
     @staticmethod
     def _windows_send_unicode_text(value):
@@ -6840,14 +6995,14 @@ class DeiLawWindow(QMainWindow):
         if not units:
             return True
 
-        events = (INPUT * (len(units) * 2))()
-        for index, unit in enumerate(units):
-            down = index * 2
-            up = down + 1
-            events[down].type = INPUT_KEYBOARD
-            events[down].ki = KEYBDINPUT(0, unit, KEYEVENTF_UNICODE, 0, 0)
-            events[up].type = INPUT_KEYBOARD
-            events[up].ki = KEYBDINPUT(
+        # Do not blast the entire string into the game's input queue at once.
+        # Event-style pacing approximates AHK's SetKeyDelay 30, 30.
+        events = (INPUT * 2)()
+        for unit in units:
+            events[0].type = INPUT_KEYBOARD
+            events[0].ki = KEYBDINPUT(0, unit, KEYEVENTF_UNICODE, 0, 0)
+            events[1].type = INPUT_KEYBOARD
+            events[1].ki = KEYBDINPUT(
                 0,
                 unit,
                 KEYEVENTF_UNICODE | KEYEVENTF_KEYUP,
@@ -6855,12 +7010,19 @@ class DeiLawWindow(QMainWindow):
                 0,
             )
 
-        sent = ctypes.windll.user32.SendInput(
-            len(events),
-            ctypes.byref(events),
-            ctypes.sizeof(INPUT),
-        )
-        return int(sent) == len(events)
+            down = ctypes.windll.user32.SendInput(
+                1, ctypes.byref(events[0]), ctypes.sizeof(INPUT)
+            )
+            if int(down) != 1:
+                return False
+            time.sleep(0.025)
+            up = ctypes.windll.user32.SendInput(
+                1, ctypes.byref(events[1]), ctypes.sizeof(INPUT)
+            )
+            if int(up) != 1:
+                return False
+            time.sleep(0.030)
+        return True
 
     @staticmethod
     def _wait_ahk_modifier_release(timeout=0.85):
@@ -6894,6 +7056,10 @@ class DeiLawWindow(QMainWindow):
             return
 
         self.ahk_runtime_busy = True
+        bind_name = str(record.get("name") or record.get("hotkey") or "RP-бинд")
+        self.ahk_runtime_status_signal.emit(
+            f"«{bind_name}»: горячая клавиша сработала; отправляю текст в Windows."
+        )
 
         def worker():
             acquired = self.ahk_runtime_lock.acquire(blocking=False)
@@ -6909,15 +7075,21 @@ class DeiLawWindow(QMainWindow):
                 ).strip()
                 parsed_chat = self.parse_windows_hotkey(chat_key)
                 if parsed_chat is None:
+                    self.ahk_runtime_status_signal.emit(
+                        f"«{bind_name}»: неверная клавиша открытия чата: {chat_key}."
+                    )
                     return
                 chat_modifiers, chat_vk = parsed_chat
                 # MOD_NOREPEAT is always present. Any other modifier means the
                 # chat-open setting is not a single key and should not be sent.
                 if chat_modifiers & 0x000F:
+                    self.ahk_runtime_status_signal.emit(
+                        f"«{bind_name}»: клавиша чата должна быть без Ctrl/Alt/Shift/Win."
+                    )
                     return
 
                 open_delay = max(
-                    40,
+                    250,
                     min(
                         3000,
                         int(
@@ -6937,13 +7109,31 @@ class DeiLawWindow(QMainWindow):
                 # input buffer before opening the chat.
                 time.sleep(0.035)
 
-                for command in commands:
-                    self._windows_send_vk(chat_vk)
-                    time.sleep(open_delay / 1000.0)
-                    self._windows_send_unicode_text(command)
-                    self._windows_send_vk(0x0D)
-                    if delay_ms:
-                        time.sleep(delay_ms / 1000.0)
+                count = send_rp_chat_lines(
+                    commands,
+                    chat_vk=chat_vk,
+                    press_key=self._windows_send_vk,
+                    send_text=self._windows_send_unicode_text,
+                    open_chat_delay_ms=open_delay,
+                    between_lines_delay_ms=delay_ms,
+                    close_chat_after_send=bool(
+                        self.ahk_bind_store.data.get("close_chat_after_send", False)
+                    ),
+                )
+                self.ahk_runtime_status_signal.emit(
+                    f"«{bind_name}»: {count} строк передано Windows. "
+                    "Проверь результат в игровом чате."
+                )
+            except MacroDeliveryError as exc:
+                logging.warning("RP-биндер %s: %s", bind_name, exc)
+                self.ahk_runtime_status_signal.emit(
+                    f"«{bind_name}»: {exc} Проверь права запуска DeiLaw и RMRP."
+                )
+            except Exception:
+                logging.exception("Неожиданная ошибка RP-биндера: %s", bind_name)
+                self.ahk_runtime_status_signal.emit(
+                    f"«{bind_name}»: внутренняя ошибка отправки. См. журнал DeiLaw."
+                )
             finally:
                 self.ahk_runtime_lock.release()
                 self.ahk_runtime_busy = False
@@ -8249,6 +8439,87 @@ class DeiLawWindow(QMainWindow):
         )
         self.save_app_settings()
 
+
+    def show_account_actions(self):
+        menu = QMenu(self)
+        mode = self.community_client.auth.mode
+        if mode == "guest":
+            login_action = menu.addAction("Войти через Discord")
+            switch_action = None
+            logout_action = None
+        else:
+            login_action = None
+            switch_action = menu.addAction("Сменить аккаунт Discord")
+            menu.addSeparator()
+            logout_action = menu.addAction("Выйти из аккаунта")
+        chosen = menu.exec(
+            self.account_button.mapToGlobal(self.account_button.rect().bottomLeft())
+        )
+        if chosen is not None and chosen in (login_action, switch_action):
+            self.open_discord_account_login()
+        elif chosen is not None and chosen == logout_action:
+            self.logout_current_account()
+
+    def _close_for_account_transition(self):
+        """Close the app fully, never asking whether to minimize to tray."""
+        previous_force_exit = self._force_full_exit
+        self._force_full_exit = True
+        # Unsaved settings can still cancel close; keep the current session in
+        # that case, and restore ordinary close-button behavior.
+        if not self.close():
+            self._force_full_exit = previous_force_exit
+            return False
+        return True
+
+    def open_discord_account_login(self):
+        # Do not revoke the current account until a different Discord login
+        # succeeds. If OAuth is cancelled, the former session remains saved.
+        if not self._close_for_account_transition():
+            return
+        try:
+            restart_deilaw_for_login_choice(discord_only=True)
+        except Exception as exc:
+            logging.exception("Could not reopen DeiLaw Discord login: %s", exc)
+            QMessageBox.critical(
+                None, "DeiLaw — смена аккаунта",
+                "Не удалось открыть вход Discord. Запустите DeiLaw заново.",
+            )
+
+    def logout_current_account(self):
+        mode = self.community_client.auth.mode
+        if mode != "discord":
+            # Guest mode is intentionally preserved: the menu offers only a
+            # direct Discord login so guest reports cannot be lost by mistake.
+            return
+        if not self._close_for_account_transition():
+            return
+
+        try:
+            revoked = self.community_client.auth.sign_out_active()
+        except Exception as exc:
+            logging.exception("Failed to remove DeiLaw account session: %s", exc)
+            QMessageBox.critical(
+                None, "DeiLaw — ошибка выхода",
+                "Не удалось удалить сохранённую сессию. "
+                "Проверьте права доступа к папке DeiLaw и запустите программу заново.",
+            )
+            return
+        if not revoked:
+            logging.warning("Remote Supabase session revocation was not confirmed")
+            QMessageBox.warning(
+                None, "DeiLaw — выход",
+                "Вы вышли из DeiLaw на этом компьютере. Но сервер не подтвердил "
+                "завершение сессии из-за ошибки связи. Попробуйте проверить интернет.",
+            )
+
+        try:
+            restart_deilaw_for_login_choice(mode)
+        except Exception as exc:
+            logging.exception("Could not reopen DeiLaw login screen: %s", exc)
+            QMessageBox.critical(
+                None, "DeiLaw — выход",
+                "Не удалось открыть выбор входа. Запустите DeiLaw заново.",
+            )
 
     def closeEvent(self, event):
         self.save_last_ai_session()
@@ -12228,6 +12499,48 @@ class DeiLawWindow(QMainWindow):
     # COMMUNITY / REVIEWS / BUG REPORTS
     # =========================================================
 
+    def start_legacy_feedback_import(self):
+        """Restore old reviews/reports silently after a verified Discord sign-in."""
+        if self.community_client.auth.mode != "discord":
+            return
+
+        def imported(result):
+            totals = dict(result or {})
+            count = sum(int(totals.get(field) or 0) for field in
+                        ("reviews", "reports", "suggestions"))
+            conflicts = int(totals.get("review_conflicts") or 0)
+            if count:
+                detail = (f"Восстановлены старые данные: "
+                          f"{totals.get('reviews',0)} отзывов и "
+                          f"{totals.get('reports',0)} репортов")
+                logging.info("Legacy community ownership restored: %s", detail)
+                if self.system_tray_icon is not None:
+                    try:
+                        self.system_tray_icon.showMessage(
+                            "DeiLaw — данные Discord",
+                            detail,
+                            QSystemTrayIcon.MessageIcon.Information, 5000,
+                        )
+                    except Exception:
+                        pass
+            if conflicts:
+                logging.warning("Old review not imported: account already has a review")
+                self.account_button.setToolTip(
+                    "Discord — старый отзыв сохранён отдельно, потому что "
+                    "в аккаунте уже есть отзыв. Репорты перенесены независимо."
+                )
+
+        def import_failed(message):
+            # Login and the main window must remain usable when cloud is down.
+            # A later community request can retry the verified import.
+            logging.warning("Old feedback ownership recovery unavailable: %s", message)
+
+        self._run_community_task(
+            self.community_client.claim_legacy_feedback,
+            on_success=imported,
+            on_error=import_failed,
+        )
+
     def _run_community_task(
         self,
         callback,
@@ -12541,9 +12854,11 @@ class DeiLawWindow(QMainWindow):
         self.community_review_details.setPlainText(details)
 
     def show_review_dialog(self):
+        if not self._allow_discord_feedback_dialog():
+            return
         dialog = QDialog(self)
         dialog.setWindowTitle("Оставить отзыв — DeiLaw")
-        dialog.resize(620, 470)
+        dialog.resize(620, 440)
 
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(22, 20, 22, 20)
@@ -12554,24 +12869,20 @@ class DeiLawWindow(QMainWindow):
         layout.addWidget(title)
 
         hint = QLabel(
-            "Оценка и текст будут публично видны другим пользователям. "
-            "Имя не обязано быть уникальным: рядом с ним DeiLaw покажет "
-            "короткий публичный ID отзыва. На одном Windows-компьютере "
-            "хранится один отзыв — повторная отправка обновляет предыдущий. "
-            "Для привязки используется анонимный хеш устройства; IP и "
-            "MAC-адрес не отправляются."
+            "Имя автоматически берётся из Discord. Оценка и текст станут "
+            "видны всем после проверки модератором. Один отзыв на Discord-аккаунт; "
+            "повторная отправка изменит существующий отзыв."
         )
         hint.setObjectName("muted")
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        author = QLineEdit()
-        author.setPlaceholderText("Ваш ник")
-        author.setMaxLength(40)
-        author.setText(
-            str(self.app_settings.get("community_review_author", "") or "")
+        discord_author = QLabel(
+            f"Ваш Discord: {self.community_client.discord_display_name()}"
         )
-        layout.addWidget(author)
+        discord_author.setObjectName("muted")
+        discord_author.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(discord_author)
 
         rating_state = {"value": 0}
         star_buttons = []
@@ -12614,7 +12925,7 @@ class DeiLawWindow(QMainWindow):
 
         buttons = QHBoxLayout()
         cancel = QPushButton("Отмена")
-        submit = QPushButton("Опубликовать отзыв")
+        submit = QPushButton("Отправить отзыв")
         submit.setObjectName("primary")
         buttons.addStretch()
         buttons.addWidget(cancel)
@@ -12624,13 +12935,9 @@ class DeiLawWindow(QMainWindow):
         cancel.clicked.connect(dialog.reject)
 
         def send_review():
-            name = " ".join(author.text().split()).strip()
             body = review.toPlainText().strip()
             score = rating_state["value"]
 
-            if not name:
-                status.setText("Укажите ник.")
-                return
             if not 1 <= score <= 5:
                 status.setText("Выберите оценку от 1 до 5 звёзд.")
                 return
@@ -12640,13 +12947,11 @@ class DeiLawWindow(QMainWindow):
 
             submit.setEnabled(False)
             cancel.setEnabled(False)
-            status.setText("Публикую отзыв…")
+            status.setText("Отправляю отзыв на модерацию…")
 
             def sent(_result):
-                self.app_settings["community_review_author"] = name
-                self.save_app_settings()
                 self.play_ui_sound("success")
-                self.show_save_toast("Отзыв опубликован")
+                self.show_save_toast("Отзыв отправлен на модерацию")
                 dialog.accept()
                 self.refresh_community_reviews()
 
@@ -12660,7 +12965,6 @@ class DeiLawWindow(QMainWindow):
             self._run_community_task(
                 self.community_client.submit_review,
                 kwargs={
-                    "author_name": name,
                     "rating": score,
                     "review_text": body,
                     "app_version": APP_VERSION,
@@ -13809,12 +14113,23 @@ class DeiLawWindow(QMainWindow):
         options_layout.addSpacing(12)
         options_layout.addWidget(QLabel("Пауза открытия чата"))
         self.ahk_open_chat_delay = QSpinBox()
-        self.ahk_open_chat_delay.setRange(40, 3000)
+        self.ahk_open_chat_delay.setRange(250, 3000)
         self.ahk_open_chat_delay.setSuffix(" мс")
         self.ahk_open_chat_delay.setValue(
-            int(self.ahk_bind_store.data.get("open_chat_delay", 140))
+            int(self.ahk_bind_store.data.get("open_chat_delay", 250))
         )
         options_layout.addWidget(self.ahk_open_chat_delay)
+
+        self.ahk_close_chat_after_send = StatusCheckBox("Закрывать чат Esc")
+        self.ahk_close_chat_after_send.setChecked(
+            bool(self.ahk_bind_store.data.get("close_chat_after_send", False))
+        )
+        self.ahk_close_chat_after_send.setToolTip(
+            "Включи, если RMRP оставляет чат открытым после отправки RP-строки. "
+            "После Enter DeiLaw дополнительно нажмёт Esc. "
+            "Если появится меню паузы GTA, отключи эту настройку."
+        )
+        options_layout.addWidget(self.ahk_close_chat_after_send)
         options_layout.addStretch()
 
         self.ahk_copy_script_button = QPushButton("Копировать скрипт")
@@ -13944,6 +14259,9 @@ class DeiLawWindow(QMainWindow):
         self.ahk_open_chat_delay.valueChanged.connect(
             self._on_ahk_options_changed
         )
+        self.ahk_close_chat_after_send.toggled.connect(
+            self._on_ahk_options_changed
+        )
         self.ahk_bind_name.textChanged.connect(self.refresh_ahk_preview)
         self.ahk_bind_hotkey.keySequenceChanged.connect(
             lambda _seq: self.refresh_ahk_preview()
@@ -13964,6 +14282,7 @@ class DeiLawWindow(QMainWindow):
             self.ahk_bind_store.set_script_options(
                 chat_key=self.ahk_chat_key.text().strip() or "t",
                 open_chat_delay=self.ahk_open_chat_delay.value(),
+                close_chat_after_send=self.ahk_close_chat_after_send.isChecked(),
             )
         except Exception:
             return
@@ -14090,6 +14409,7 @@ class DeiLawWindow(QMainWindow):
             self.ahk_bind_store.set_script_options(
                 chat_key=self.ahk_chat_key.text().strip() or "t",
                 open_chat_delay=self.ahk_open_chat_delay.value(),
+                close_chat_after_send=self.ahk_close_chat_after_send.isChecked(),
             )
             # Validate the generated AHK hotkey immediately.
             self.ahk_bind_store.generate_script()
@@ -14163,8 +14483,15 @@ class DeiLawWindow(QMainWindow):
                 f"    {chat_line}",
                 f"    Sleep {self.ahk_open_chat_delay.value()}",
                 f'    SendText "{escaped}"',
+                "    Sleep 180",
                 '    Send "{Enter}"',
             ])
+            if self.ahk_close_chat_after_send.isChecked():
+                snippet.extend([
+                    "    Sleep 250",
+                    '    Send "{Esc}"',
+                    "    Sleep 150",
+                ])
             if self.ahk_bind_delay.value():
                 snippet.append(f"    Sleep {self.ahk_bind_delay.value()}")
         snippet.append("}")
@@ -14177,6 +14504,7 @@ class DeiLawWindow(QMainWindow):
             self.ahk_bind_store.set_script_options(
                 chat_key=self.ahk_chat_key.text().strip() or "t",
                 open_chat_delay=self.ahk_open_chat_delay.value(),
+                close_chat_after_send=self.ahk_close_chat_after_send.isChecked(),
             )
             self.ahk_script_preview.setPlainText(
                 self._current_ahk_preview_script()
@@ -14200,6 +14528,7 @@ class DeiLawWindow(QMainWindow):
             self.ahk_bind_store.set_script_options(
                 chat_key=self.ahk_chat_key.text().strip() or "t",
                 open_chat_delay=self.ahk_open_chat_delay.value(),
+                close_chat_after_send=self.ahk_close_chat_after_send.isChecked(),
             )
             script = self.ahk_bind_store.generate_script()
         except Exception as exc:
@@ -18455,12 +18784,35 @@ class DeiLawWindow(QMainWindow):
 
         style += self._visual_theme_component_qss(light)
 
+        # Compact account status is a single full-width button, not a second
+        # navigation-sized "change account" control. Apply it after all
+        # theme-specific button rules so every theme keeps the same geometry.
+        style += f"""
+            QPushButton#accountStatus {{
+                background-color: {theme_button};
+                color: {theme_text};
+                border: 1px solid {theme_border};
+                border-radius: 9px;
+                text-align: left;
+                font-size: 12px;
+                font-weight: 600;
+                padding: 6px 10px;
+            }}
+            QPushButton#accountStatus:hover,
+            QPushButton#accountStatus:focus {{
+                background-color: {theme_button_hover};
+                border-color: {theme_primary_border};
+            }}
+        """
+
         style = style.replace("font-size: 14px;", f"font-size: {base_font}px;")
         style = style.replace("font-size: 15px;", f"font-size: {base_font + 1}px;")
         style = style.replace("font-size: 19px;", f"font-size: {base_font + 5}px;")
         style = style.replace("font-size: 26px;", f"font-size: {base_font + 12}px;")
         style = style.replace("font-size: 28px;", f"font-size: {base_font + 14}px;")
         self.setStyleSheet(style)
+        if hasattr(self, "account_button"):
+            self.account_button.refresh_label()
 
         if self.memo_overlay is not None:
             self.apply_overlay_background_opacity()

@@ -1,0 +1,21 @@
+{$DEILAW_AV_DOMAIN} {
+    # TLS certificates are obtained by Caddy only when the domain/DNS resolve.
+    encode zstd gzip
+    @scan path /scan
+    handle @scan {
+        request_body {
+            max_size 11MB
+        }
+        reverse_proxy scanner:10000 {
+            transport http {
+                read_timeout 30s
+                write_timeout 30s
+            }
+        }
+    }
+    @health path /health
+    handle @health {
+        reverse_proxy scanner:10000
+    }
+    respond "Not found" 404
+}

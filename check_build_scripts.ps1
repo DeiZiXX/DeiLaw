@@ -2,8 +2,8 @@
 Set-Location -LiteralPath $PSScriptRoot
 
 $files = @(
-    (Join-Path $PSScriptRoot 'build_release.ps1'),
-    (Join-Path $PSScriptRoot 'publish_release.ps1')
+    (Join-Path $PSScriptRoot 'build_app_only.ps1'),
+    (Join-Path $PSScriptRoot 'build_release.ps1')
 )
 
 $failed = $false

@@ -1,2 +1,7 @@
+project_id = "deilaw-local-security"
+
 [functions.deilaw-ai]
-verify_jwt = false
+verify_jwt = true
+
+[functions.deilaw-report-attachments]
+verify_jwt = true

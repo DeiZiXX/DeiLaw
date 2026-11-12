@@ -1,0 +1,11 @@
+DeiLaw 0.3.5rc7 — Discord Account Feedback (source)
+- Новые отзывы и репорты только с подтверждённым Discord-входом.
+- Ник для отзыва из Discord, без редактируемого поля.
+- Один отзыв на аккаунт Discord, повторное отправление редактирует.
+- Новые / изменённые отзывы требуют модерации.
+- Серверная идентичность не может быть подменена через клиентское поле.
+- Старые отзывы и репорты остаются сохранёнными.
+- Совместимость с Support Center 0.2.3.
+- Сборка Windows: build_app_only.bat; результат dist\DeiLaw\DeiLaw.exe
+- Supabase production migration already applied: DO NOT re-run legacy setup SQL.
+- Source tests pass; user must verify GUI on Windows before distribution.

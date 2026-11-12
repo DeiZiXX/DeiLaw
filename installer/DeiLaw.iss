@@ -1,4 +1,4 @@
-﻿#define MyAppName "DeiLaw"
+#define MyAppName "DeiLaw"
 #ifndef MyAppVersion
 #define MyAppVersion "0.2.1a"
 #endif
@@ -72,6 +72,8 @@ Name: "{autodesktop}\DeiLaw"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{a
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Запустить DeiLaw"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
+; Signed unattended updates restart DeiLaw only after Inno Setup completes.
+Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Flags: nowait skipifnotsilent
 
 [Code]
 var

@@ -11,6 +11,8 @@ import requests
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from app_version import APP_VERSION
+from update_trust import verify_manifest, UntrustedUpdateError
+from update_download_security import validate_signed_download
 
 
 MANIFEST_ASSET = "update_manifest.json"
@@ -291,10 +293,13 @@ class UpdateCheckWorker(QThread):
             )
             manifest_response.raise_for_status()
             manifest = manifest_response.json()
+            verify_manifest(manifest)
 
             manifest_version = str(
                 manifest.get("version") or tag_version
             ).strip().lstrip("vV")
+            if manifest_version != tag_version:
+                raise RuntimeError("Версия подписанного манифеста не совпадает с тегом релиза.")
             if not is_newer_version(manifest_version):
                 self.no_update.emit(
                     f"Установлена актуальная версия DeiLaw {APP_VERSION}."
@@ -351,6 +356,7 @@ class UpdateCheckWorker(QThread):
                     or 0
                 ),
                 "release_url": release.get("html_url") or "",
+                "signed_manifest": dict(manifest),
             }
 
             if not info["download_url"]:
@@ -479,9 +485,8 @@ class UpdateDownloadWorker(QThread):
         partial_path = None
         try:
             version = self.update_info["version"]
-            name = self.update_info["installer_name"]
+            name, expected, expected_size = validate_signed_download(self.update_info)
             url = self.update_info["download_url"]
-            expected = self.update_info["sha256"].lower()
 
             local_appdata = os.environ.get("LOCALAPPDATA")
             if local_appdata:
@@ -505,11 +510,9 @@ class UpdateDownloadWorker(QThread):
                 headers={"User-Agent": f"DeiLaw/{APP_VERSION}"},
             ) as response:
                 response.raise_for_status()
-                total = int(
-                    response.headers.get("Content-Length")
-                    or self.update_info.get("size")
-                    or 0
-                )
+                total = int(response.headers.get("Content-Length") or expected_size)
+                if total > expected_size:
+                    raise RuntimeError("Превышен подписанный размер обновления.")
 
                 with partial_path.open("wb") as handle:
                     for chunk in response.iter_content(
@@ -517,6 +520,8 @@ class UpdateDownloadWorker(QThread):
                     ):
                         if not chunk:
                             continue
+                        if downloaded + len(chunk) > expected_size:
+                            raise RuntimeError("Установщик превысил подписанный размер.")
                         handle.write(chunk)
                         digest.update(chunk)
                         downloaded += len(chunk)
@@ -532,7 +537,7 @@ class UpdateDownloadWorker(QThread):
                         )
 
             actual = digest.hexdigest().lower()
-            if actual != expected:
+            if downloaded != expected_size or actual != expected:
                 try:
                     partial_path.unlink(missing_ok=True)
                 except Exception:
@@ -559,85 +564,65 @@ class UpdateDownloadWorker(QThread):
             self.error.emit(str(exc))
 
 
-def create_update_install_helper(installer_path):
-    """Create a PowerShell helper that waits for DeiLaw to exit, updates, restarts."""
-    installer_path = Path(installer_path).resolve()
-    if not installer_path.exists():
-        raise FileNotFoundError(installer_path)
+def create_update_install_helper(installer_path, update_info):
+    """Return an argument vector for *only* a cryptographically authorized EXE.
 
-    current_pid = os.getpid()
-
-    if getattr(sys, "frozen", False):
-        restart_file = Path(sys.executable).resolve()
-        restart_args = ""
-    else:
-        restart_file = Path(sys.executable).resolve()
-        restart_args = str((Path(__file__).resolve().parent / "main.py"))
-
-    helper_dir = installer_path.parent
-    helper_path = helper_dir / "deilaw_update_helper.ps1"
-
-    def ps_quote(value):
-        return str(value).replace("'", "''")
-
-    installer_q = ps_quote(installer_path)
-    restart_q = ps_quote(restart_file)
-    restart_args_q = ps_quote(restart_args)
-
-    script = f"""$ErrorActionPreference = 'SilentlyContinue'
-$TargetPid = {current_pid}
-$Installer = '{installer_q}'
-$RestartFile = '{restart_q}'
-$RestartArgs = '{restart_args_q}'
-
-try {{
-    Wait-Process -Id $TargetPid -ErrorAction SilentlyContinue
-}} catch {{}}
-
-$Args = @(
-    '/VERYSILENT',
-    '/SUPPRESSMSGBOXES',
-    '/NORESTART',
-    '/CLOSEAPPLICATIONS'
-)
-
-$Process = Start-Process -FilePath $Installer -ArgumentList $Args -Wait -PassThru
-if ($Process -and $Process.ExitCode -eq 0) {{
-    Remove-Item -LiteralPath $Installer -Force -ErrorAction SilentlyContinue
-}}
-
-# Always reopen DeiLaw after the installer attempt. If installation failed,
-# the currently installed version is still available to the user.
-if ([string]::IsNullOrWhiteSpace($RestartArgs)) {{
-    Start-Process -FilePath $RestartFile
-}} else {{
-    Start-Process -FilePath $RestartFile -ArgumentList @($RestartArgs)
-}}
-
-Start-Sleep -Milliseconds 800
-Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
-"""
-    helper_path.write_text(script, encoding="utf-8-sig")
-    return helper_path
+    A release signing key is intentionally NOT included in source builds.
+    Only installer-managed Windows releases with a pinned verification key
+    may use this path. There are no PowerShell helpers or shell commands.
+    """
+    manifest = update_info.get("signed_manifest")
+    verify_manifest(manifest)  # Ed25519, fails closed when no release public key.
+    name, expected_sha256, expected_size = validate_signed_download(update_info)
+    if (str(manifest["installer_asset"]) != name
+        or manifest["sha256"].lower() != expected_sha256
+        or manifest["size"] != expected_size
+        or str(manifest["version"]) != str(update_info.get("version"))
+        or not is_newer_version(manifest["version"])):
+        raise UntrustedUpdateError("Метаданные подписанного обновления не совпадают.")
+    if os.name != "nt" or not getattr(sys, "frozen", False):
+        raise UntrustedUpdateError("Автоустановка доступна только в установленной Windows-версии DeiLaw.")
+    app_dir = app_base_dir()
+    if Path(sys.executable).name.lower() != "deilaw.exe" or not (app_dir / "unins000.exe").is_file():
+        raise UntrustedUpdateError("DeiLaw запущен не из установленной версии. Установите официальный релиз вручную.")
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    if not local_appdata:
+        raise UntrustedUpdateError("Не найден системный каталог обновлений Windows.")
+    update_dir = (Path(local_appdata) / "DeiLaw" / "updates").resolve()
+    installer = Path(installer_path).resolve()
+    if installer.parent != update_dir or installer.name != name or not installer.is_file():
+        raise UntrustedUpdateError("Недоверенный путь установщика.")
+    if installer.stat().st_size != expected_size:
+        raise UntrustedUpdateError("Изменился размер загруженного установщика.")
+    digest = hashlib.sha256()
+    with installer.open("rb") as handle:
+        while chunk := handle.read(1024 * 1024):
+            digest.update(chunk)
+    if digest.hexdigest().lower() != expected_sha256:
+        raise UntrustedUpdateError("Подпись корректна, но содержимое установщика изменилось.")
+    return {
+        "installer_path": str(installer),
+        "update_info": dict(update_info),
+    }
 
 
-def launch_update_helper(helper_path):
-    flags = 0
-    if sys.platform == "win32":
-        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+def launch_update_helper(launch_plan):
+    """Recheck Ed25519 + SHA256 at the execution boundary; no shell/PowerShell.
 
-    subprocess.Popen(
-        [
-            "powershell.exe",
-            "-NoLogo",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-WindowStyle",
-            "Hidden",
-            "-File",
-            str(Path(helper_path).resolve()),
-        ],
-        close_fds=True,
-        creationflags=flags,
-    )
+    This requires a valid signed manifest even if a caller invokes this
+    function directly with an arbitrary launch plan.
+    """
+    if not isinstance(launch_plan, dict):
+        raise UntrustedUpdateError("Недоверенный план установки обновления.")
+    installer_path = launch_plan.get("installer_path")
+    update_info = launch_plan.get("update_info")
+    if not isinstance(installer_path, str) or not isinstance(update_info, dict):
+        raise UntrustedUpdateError("Некорректные данные запуска установщика.")
+    # Recheck metadata, install directory, file identity and file hash just
+    # before CreateProcess, not only when the download completed.
+    create_update_install_helper(installer_path, update_info)
+    command = [
+        installer_path, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
+        "/CLOSEAPPLICATIONS",
+    ]
+    subprocess.Popen(command, close_fds=True, shell=False)

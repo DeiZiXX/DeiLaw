@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
 
 from app_version import APP_VERSION
 from user_state import BackupManager
+from update_preferences import mode_from_settings, update_action
 from updater import (
     UpdateCheckWorker,
     UpdateDownloadWorker,
@@ -49,6 +50,10 @@ def _read_startup_update_channel():
         return channel if channel in ("stable", "beta") else default_channel
     except Exception:
         return default_channel
+
+
+def _read_startup_update_mode():
+    return mode_from_settings(_app_base_dir() / "data" / "settings.json")
 
 
 def _startup_state_path():
@@ -130,7 +135,7 @@ class StartupUpdateDialog(QDialog):
     CONTINUE_STARTUP = 1
     UPDATE_STARTED = 2
 
-    def __init__(self, update_channel="stable"):
+    def __init__(self, update_channel="stable", update_install_mode="confirm", start_check=True):
         super().__init__(None)
 
         self.update_channel = (
@@ -138,6 +143,8 @@ class StartupUpdateDialog(QDialog):
             if update_channel in ("stable", "beta")
             else "stable"
         )
+        self.update_install_mode = update_install_mode
+        self.update_info = None
         self.check_worker = None
         self.download_worker = None
         self.update_started = False
@@ -216,7 +223,8 @@ class StartupUpdateDialog(QDialog):
             """
         )
 
-        QTimer.singleShot(120, self.start_check)
+        if start_check:
+            QTimer.singleShot(120, self.start_check)
 
     def set_stage(self, number, title, detail=None, progress=None):
         number = max(1, min(5, int(number)))
@@ -289,9 +297,30 @@ class StartupUpdateDialog(QDialog):
 
     def on_update_available(self, info):
         version = str(info.get("version") or "")
+        self.update_info = dict(info)
+        action = update_action(self.update_install_mode)
+        if action == "notify":
+            self.status_label.setText(
+                f"Доступна версия DeiLaw {version}. Установлена текущая версия."
+            )
+            self.busy = False
+            QTimer.singleShot(800, lambda: self.done(self.CONTINUE_STARTUP))
+            return
+        if action == "ask":
+            reply = QMessageBox.question(
+                self, "Обновление DeiLaw",
+                f"Доступна новая версия DeiLaw {version}.\n\n"
+                "Скачать и установить проверенное обновление сейчас?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                self.busy = False
+                self.done(self.CONTINUE_STARTUP)
+                return
         self.status_label.setText(
             f"Найдена новая версия DeiLaw {version}.\n"
-            "Автоматически скачиваю обновление…"
+            "Скачиваю проверенное обновление…"
         )
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
@@ -349,7 +378,9 @@ class StartupUpdateDialog(QDialog):
             except Exception as backup_exc:
                 logging.warning("Pre-update backup failed: %s", backup_exc)
 
-            helper = create_update_install_helper(installer_path)
+            helper = create_update_install_helper(
+                installer_path, self.update_info
+            )
             launch_update_helper(helper)
         except Exception as exc:
             self.status_label.setText(
@@ -376,6 +407,8 @@ class StartupUpdateDialog(QDialog):
 
 
 def main():
+    # Fix data/ being resolved against an arbitrary shortcut/console CWD.
+    os.chdir(_app_base_dir())
     app = QApplication(sys.argv)
     app.setApplicationName("DeiLaw")
     log_path = _setup_logging()
@@ -383,11 +416,19 @@ def main():
 
     startup_failures = _begin_startup_attempt()
     update_channel = _read_startup_update_channel()
+    update_install_mode = _read_startup_update_mode()
 
     # This happens before DeiLawWindow is constructed, therefore on the first
     # run the onboarding cannot start until the update check has finished.
-    startup_update = StartupUpdateDialog(update_channel)
-    result = startup_update.exec()
+    # Account transitions skip the pre-launch updater entirely.
+    auth_choice_requested = "--auth-choice" in sys.argv
+    discord_switch_requested = "--auth-discord" in sys.argv
+    auth_restart = auth_choice_requested or discord_switch_requested
+    startup_update = StartupUpdateDialog(
+        update_channel, update_install_mode, start_check=not auth_restart
+    )
+    result = (StartupUpdateDialog.CONTINUE_STARTUP
+              if auth_restart else startup_update.exec())
 
     if (
         result == StartupUpdateDialog.UPDATE_STARTED
@@ -405,6 +446,46 @@ def main():
             "Безопасный режим",
             "Запускаю DeiLaw с минимальным набором функций…",
         )
+
+    # Choose an authenticated Discord or guest identity before constructing
+    # community clients, Cloud AI, hotkeys, or any of the main window.
+    from cloud_auth import AnonymousSupabaseSession, WindowsTokenStore, CloudAuthError
+    from community_client import SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY
+    from ui.auth_dialog import AuthChoiceDialog
+
+    auth = AnonymousSupabaseSession(
+        SUPABASE_URL,
+        SUPABASE_PUBLISHABLE_KEY,
+        store=WindowsTokenStore(_app_base_dir() / "data" / "cloud_auth.bin"),
+    )
+    if auth_choice_requested:
+        for logged_out_mode in ("discord", "guest"):
+            if f"--logout-mode={logged_out_mode}" in sys.argv:
+                auth.discard_saved_mode(logged_out_mode)
+    # Existing Discord/guest sessions survive app restarts. Only show the
+    # account picker on first launch, after an invalid session, or when the
+    # user explicitly requested another account in the sidebar.
+    restored = False
+    if auth.mode is not None and not auth_restart:
+        startup_update.busy = True
+        startup_update.show()
+        startup_update.set_stage(2, "Авторизация", "Восстанавливаю сохранённый вход…")
+        QApplication.processEvents()
+        try:
+            restored = auth.resume_active() is not None
+        except (CloudAuthError, ValueError, TypeError) as exc:
+            logging.warning("Saved DeiLaw login could not be restored: %s", exc)
+        finally:
+            startup_update.hide()
+            startup_update.busy = False
+
+    if not restored:
+        login_dialog = AuthChoiceDialog(auth, discord_only=discord_switch_requested)
+        if login_dialog.exec() != QDialog.DialogCode.Accepted:
+            _mark_startup_success()
+            return
+
+    logging.info("DeiLaw user session accepted: %s", auth.mode)
 
     # Import and construct the large UI only after the update check.
     # This makes the startup/update window appear immediately instead of
@@ -431,6 +512,9 @@ def main():
     )
     window.show()
     QApplication.processEvents()
+    # Verify the saved installation secret and migrate old feedback only once
+    # the Discord session and UI have been restored. Never block startup.
+    QTimer.singleShot(350, window.start_legacy_feedback_import)
     _mark_startup_success()
 
     startup_update.busy = False
