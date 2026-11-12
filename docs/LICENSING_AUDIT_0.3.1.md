@@ -40,3 +40,20 @@ Discord, Supabase, OpenAI, GitHub и форум RMRP — удалённые се
 5. Финальной проверки соответствия GPL/LGPL и комплекта исходников выпускаемому EXE.
 
 Ссылки: https://www.riverbankcomputing.com/software ; https://doc.qt.io/qt-6/licensing.html ; https://pypi.org/project/requests/2.34.2/ ; https://pypi.org/project/beautifulsoup4/ ; https://pypi.org/project/cryptography/ ; https://www.pyinstaller.org/en/stable/license.html ; https://github.com/supabase/supabase-js/blob/master/LICENSE ; https://github.com/jrsoftware/issrc/blob/main/license.txt ; https://signpath.org/terms .
+
+
+## Дополнительная техническая проверка 12.11.2026
+
+Проверена **исправленная исходная сборка** `DeiLaw_0.3.1_FIXED_BUILD_WITH_ICON.zip`, без запуска готового Windows EXE:
+
+- `python scripts/verify_source.py`: OK, 58 Python-файлов, синтаксис, структура и типичные шаблоны секретов.
+- `python -m unittest discover -s tests -q`: **95/95 OK** (статические/модульные тесты; это НЕ независимый security/лицензионный аудит).
+- В исходном ZIP 12 медиа: 11 PNG/ICO и один WAV. Данные PNG/ICO читаются, в их встроенных metadata нет данных об авторстве. WAV: PCM 16 bit, 1 канал, 44 100 Гц, ~2.194 с, кодировщик Lavf61.7.103; в заголовках нет доказательства авторства.
+- Визуально у иконок и фонов не выявлено **очевидных** сторонних логотипов, официальных игровых эмблем или персонажей. Без оригинальных исходников и поисков по авторскому праву это не подтверждает уникальность; происхождение звука по WAV проверить нельзя.
+- Проверен `installer/DeiLaw.iss`: в установке нет страницы раскрытия политики конфиденциальности и выбора отключения фоновых необязательных передач. Код `updater.py` включает `check_on_startup=True`, `ui/main_window.py` принудительно выставляет `auto_check_program_updates=True` и блокирует соответствующий переключатель. **Блокер SignPath** для пользовательского opt-out, если трафик подпадает под указанное условие.
+- Inno Setup использует собственную лицензию `InnoSetup`, которая **не помечена OSI-approved в SPDX**, тогда как SignPath требует OSI-approved все компоненты. Нельзя объявлять этот runtime автоматически подходящим: получить ответ SignPath или перейти на подходящий установщик с проверенными лицензиями, например рассмотреть NSIS с аудитом выбранных модулей.
+- `build_release.ps1` рассчитан на локальный Authenticode-сертификат, не на SignPath. Отдельной работоспособной подписывающей GitHub Actions-интеграции на проверенном исходном дереве нет; **не считается подписанным**.
+- В ZIP нет результатов реальной Windows-сборки `dist/DeiLaw` и setup EXE. Поэтому сборочные DLL, Qt-плагины, транзитивные компоненты и их лицензии/хеши **не могли быть проверены по готовому дистрибутиву**.
+- Условия лицензии Python-зависимостей сверены с PyPI, а PyQt — с Riverbank. Статический аудит импортов не выявил явной необходимости в дополнительных прямых пакетах, но транзитивная поставка не проверена.
+
+Детальный отчёт с SHA-256 медиа и ссылками: [SIGNPATH_VERIFICATION_20261112.md](SIGNPATH_VERIFICATION_20261112.md).
