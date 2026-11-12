@@ -1,5 +1,5 @@
 param(
-    [string]$InnoCompiler = 'ISCC.exe',
+    [string]$NsisCompiler = 'makensis.exe',
     [string]$SignTool = 'signtool.exe',
     [string]$CertificateThumbprint = $env:DEILAW_AUTHENTICODE_THUMBPRINT,
     [string]$Ed25519Key = $env:DEILAW_UPDATE_SIGNING_KEY
@@ -33,8 +33,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Windows trust verification failed for DeiLaw.e
 $AppSignature = Get-AuthenticodeSignature -LiteralPath $AppExe
 if ($AppSignature.Status -ne 'Valid') { throw 'DeiLaw.exe has no valid Authenticode signature.' }
 
-& $InnoCompiler "/DMyAppVersion=$Version" 'installer\DeiLaw.iss'
-if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compilation failed.' }
+& $NsisCompiler "/DAPP_VERSION=$Version" "/DDEILAW_SOURCE=$PSScriptRoot\dist\DeiLaw" "/DDEILAW_OUTPUT=$PSScriptRoot\release" 'installer\DeiLaw.nsi'
+if ($LASTEXITCODE -ne 0) { throw 'NSIS compilation failed.' }
 $Installer = Join-Path $PSScriptRoot "release\DeiLaw_Setup_v$Version.exe"
 if (!(Test-Path -LiteralPath $Installer)) { throw 'Release installer missing.' }
 
@@ -52,4 +52,4 @@ if ($LASTEXITCODE -ne 0) { throw 'Manifest creation failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Manifest signing failed.' }
 & $Python -c 'import json,sys,update_trust; update_trust.verify_manifest(json.load(open(sys.argv[1],encoding="utf-8")));print("Signed manifest verified")' $Manifest
 if ($LASTEXITCODE -ne 0) { throw 'Release manifest verification failed.' }
-Write-Host "Signed release ready at $Installer" -ForegroundColor Green
+Write-Host "Locally signed NSIS release ready at $Installer" -ForegroundColor Green

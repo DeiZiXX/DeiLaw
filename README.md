@@ -175,6 +175,17 @@ Supabase publishable key, используемый desktop-клиентом, я�
 
 Для вопросов по верификации проекта можно использовать Telegram либо GitHub Issues.
 
+## Code signing policy / цифровая подпись
+
+Политика подготовки к подписи: [Code signing policy](CODE_SIGNING_POLICY.md).
+Проект **пока не одобрен SignPath Foundation и не имеет подписанного релиза**.
+Подготовка лицензионных прав: [GPL plan](docs/GPL3_TRANSITION_PLAN.md) и
+[license audit](docs/LICENSING_AUDIT_0.3.1.md).
+
+Новый открытый сценарий установщика: `installer/DeiLaw.nsi` (NSIS),
+проверяемая Windows-сборка: `.github/workflows/windows-build.yml`.
+Нельзя обозначать артефакты этого workflow как подписанные.
+
 ## Правовой статус
 
 DeiLaw — независимый пользовательский инструмент. Названия RMRP и связанных игровых организаций используются только для описания совместимости и назначения программы. Проект не заявляет аффилированность с владельцами RMRP.

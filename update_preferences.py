@@ -27,3 +27,12 @@ def update_action(mode):
     if mode == "confirm":
         return "ask"
     return "notify"
+
+
+def startup_checks_enabled(settings_path):
+    """Fail closed for new installs. Respect explicit settings on upgrades."""
+    try:
+        value = json.loads(Path(settings_path).read_text(encoding="utf-8"))
+        return isinstance(value, dict) and value.get("auto_check_program_updates") is True
+    except (OSError, ValueError, UnicodeError):
+        return False

@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
 
 from app_version import APP_VERSION
 from user_state import BackupManager
-from update_preferences import mode_from_settings, update_action
+from update_preferences import mode_from_settings, update_action, startup_checks_enabled
 from updater import (
     UpdateCheckWorker,
     UpdateDownloadWorker,
@@ -425,10 +425,12 @@ def main():
     discord_switch_requested = "--auth-discord" in sys.argv
     auth_restart = auth_choice_requested or discord_switch_requested
     startup_update = StartupUpdateDialog(
-        update_channel, update_install_mode, start_check=not auth_restart
+        update_channel, update_install_mode,
+        start_check=(not auth_restart and startup_checks_enabled(_app_base_dir() / "data" / "settings.json"))
     )
     result = (StartupUpdateDialog.CONTINUE_STARTUP
-              if auth_restart else startup_update.exec())
+              if auth_restart or not startup_checks_enabled(_app_base_dir() / "data" / "settings.json")
+              else startup_update.exec())
 
     if (
         result == StartupUpdateDialog.UPDATE_STARTED
