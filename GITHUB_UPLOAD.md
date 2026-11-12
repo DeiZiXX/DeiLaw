@@ -9,7 +9,7 @@ git init
 git branch -M main
 git remote add origin https://github.com/DeiZiXX/DeiLaw.git
 git add .
-git commit -m "Publish DeiLaw v0.3.4 source for verification"
+git commit -m "Publish DeiLaw v0.3.1 source for verification"
 git push -u origin main
 ```
 

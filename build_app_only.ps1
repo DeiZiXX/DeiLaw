@@ -14,7 +14,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Source verification failed.' }
 & $Python -m unittest discover -s tests -q
 if ($LASTEXITCODE -ne 0) { throw 'Security or binder tests failed.' }
 
-& $Python -m PyInstaller --noconfirm --clean --onedir --windowed --name DeiLaw --icon 'installer\assets\deilaw_installer.ico' --add-data 'assets;assets' main.py
+& $Python -m PyInstaller --noconfirm --clean --onedir --windowed --name DeiLaw --version-file 'installer\version_info.txt' --icon 'installer\assets\deilaw_installer.ico' --add-data 'assets;assets' main.py
 if ($LASTEXITCODE -ne 0) { throw 'PyInstaller build failed.' }
 
 $Exe = Join-Path $PSScriptRoot 'dist\DeiLaw\DeiLaw.exe'

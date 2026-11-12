@@ -1,6 +1,6 @@
 #define MyAppName "DeiLaw"
 #ifndef MyAppVersion
-#define MyAppVersion "0.2.1a"
+#define MyAppVersion "0.3.1"
 #endif
 #define MyAppPublisher "DeiZi"
 #define MyAppExeName "DeiLaw.exe"

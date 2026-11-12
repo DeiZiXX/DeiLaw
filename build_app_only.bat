@@ -42,7 +42,7 @@ echo Running security and binder tests...
 if errorlevel 1 goto failed
 
 echo Building DeiLaw.exe for Windows...
-"%PYTHON_EXE%" %PYTHON_SWITCH% -m PyInstaller --noconfirm --clean --onedir --windowed --name DeiLaw --icon "installer\assets\deilaw_installer.ico" --add-data "assets;assets" main.py
+"%PYTHON_EXE%" %PYTHON_SWITCH% -m PyInstaller --noconfirm --clean --onedir --windowed --name DeiLaw --version-file "installer\version_info.txt" --icon "installer\assets\deilaw_installer.ico" --add-data "assets;assets" main.py
 if errorlevel 1 goto failed
 
 if not exist "dist\DeiLaw\DeiLaw.exe" (

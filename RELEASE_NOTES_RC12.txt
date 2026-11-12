@@ -1,4 +1,4 @@
-DeiLaw 0.3.5rc12 — Auth CAPTCHA integration + security deployment
+DeiLaw 0.3.1 — Auth CAPTCHA integration + security deployment
 
 - Одноразовая Turnstile CAPTCHA для новой гостевой регистрации при настроенном публичном sitekey.
 - Публичный sitekey не заменяет секрет Turnstile в Supabase. До настройки боевого провайдера CAPTCHA не активирована.

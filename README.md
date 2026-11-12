@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <strong>Текущая тестовая версия исходников: 0.3.5rc12</strong> · Windows · Python / PyQt6
+  <strong>Текущая версия исходников: 0.3.1</strong> · Windows · Python / PyQt6
 </p>
 
 > [!IMPORTANT]
