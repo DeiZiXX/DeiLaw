@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import os
 import py_compile
 import re
 import sys
@@ -24,7 +25,19 @@ REQUIRED = [
     "README.md",
 ]
 
-SKIP_SUFFIXES = {".png", ".ico", ".wav", ".docx", ".db", ".sqlite", ".sqlite3"}
+# Never scan installed dependencies or transient build products as project code.
+# They routinely contain SPDX snippets such as "sk-..." and PEM examples.
+IGNORED_DIRS = {".git", ".venv", "venv", "build", "dist", "__pycache__", ".pytest_cache", ".mypy_cache"}
+SOURCE_EXTENSIONS = {".py", ".ts", ".sql", ".json", ".md", ".txt", ".yml", ".yaml", ".toml", ".ps1", ".bat", ".iss", ".nsi", ".ini", ".env"}
+
+def project_files():
+    for folder, dirs, files in os.walk(ROOT):
+        dirs[:] = [name for name in dirs if name not in IGNORED_DIRS]
+        for name in files:
+            file = Path(folder) / name
+            if file.suffix.lower() in SOURCE_EXTENSIONS or file.name in (".env", ".gitignore"):
+                yield file
+
 SECRET_PATTERNS = {
     "OpenAI API key": re.compile(r"sk-[A-Za-z0-9_-]{20,}"),
     "GitHub token": re.compile(r"gh[pousr]_[A-Za-z0-9_]{20,}"),
@@ -43,8 +56,8 @@ def check_required(errors: list[str]) -> None:
 
 
 def check_python(errors: list[str]) -> None:
-    for path in ROOT.rglob("*.py"):
-        if any(part.startswith(".") for part in path.relative_to(ROOT).parts):
+    for path in project_files():
+        if path.suffix != ".py":
             continue
         try:
             source = path.read_text(encoding="utf-8")
@@ -55,11 +68,7 @@ def check_python(errors: list[str]) -> None:
 
 
 def check_secrets(errors: list[str]) -> None:
-    for path in ROOT.rglob("*"):
-        if not path.is_file() or path.suffix.lower() in SKIP_SUFFIXES:
-            continue
-        if ".git" in path.parts:
-            continue
+    for path in project_files():
         try:
             text = path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
@@ -88,7 +97,7 @@ def main() -> int:
             print(f"[ERROR] {item}")
         return 1
 
-    py_count = sum(1 for _ in ROOT.rglob("*.py"))
+    py_count = sum(1 for path in project_files() if path.suffix == ".py")
     print(f"DeiLaw source verification OK (version {version})")
     print(f"Python files checked: {py_count}")
     print("Required source tree: OK")
