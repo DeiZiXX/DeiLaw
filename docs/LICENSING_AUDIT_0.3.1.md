@@ -57,3 +57,16 @@ Discord, Supabase, OpenAI, GitHub и форум RMRP — удалённые се
 - Условия лицензии Python-зависимостей сверены с PyPI, а PyQt — с Riverbank. Статический аудит импортов не выявил явной необходимости в дополнительных прямых пакетах, но транзитивная поставка не проверена.
 
 Детальный отчёт с SHA-256 медиа и ссылками: [SIGNPATH_VERIFICATION_20261112.md](SIGNPATH_VERIFICATION_20261112.md).
+
+## Этап реализации SignPath-кандидата (13.11.2026)
+
+В отдельной ветке подготовлены `installer/DeiLaw.nsi` (NSIS с zlib вместо Inno Setup),
+`installer/PRIVACY_INSTALL.txt`, выбор opt-in для фоновых запросов, исходная Windows CI
+и отдельный условно запускаемый SignPath workflow. Эти новые файлы **не делают
+текущий релиз или main автоматически GPL**. Действующее `LICENSE` не меняется.
+Текст GPL-3.0-only только предложен в `docs/GPL-3.0-PROPOSED.txt`.
+
+Не проверены на реальном runner: компиляция NSIS, поставка DLL, безопасный переход со старого
+Inno Setup, UX выбора приватности, выполнение SignPath action. Повторно подтвердить
+соответствие NSIS/zlib требованиям SignPath необходимо на реальном релизном артефакте.
+Полный список: [SIGNPATH_FINAL_GATE.md](SIGNPATH_FINAL_GATE.md).

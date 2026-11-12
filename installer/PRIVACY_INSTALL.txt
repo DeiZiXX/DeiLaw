@@ -1,0 +1,25 @@
+DeiLaw - Privacy and network communication
+==========================================
+
+This program is unofficial, is not affiliated with RMRP, and can contact
+third-party online services depending on your choices.
+
+Automatic background connections are OFF by default on a new installation.
+You can optionally enable the following on the next page:
+- GitHub: automatic checking of DeiLaw updates and release history.
+- RMRP websites: automatic refreshing of in-game legislation.
+- Supabase: polling for replies to your support reports.
+
+Requests explicitly initiated by you may contact:
+- Supabase for Discord or guest authentication, reviews, reports and Cloud AI.
+- Discord for login; OpenAI via the Supabase backend for Cloud AI queries.
+- RMRP websites for law searches and updates.
+- GitHub for manual update checks and viewing release history.
+
+The data shared can include your submitted text, limited conversation context,
+account/session identifiers and user-supplied attachments. Read PRIVACY.md
+in the source repository for the full details and available controls:
+https://github.com/DeiZiXX/DeiLaw/blob/main/PRIVACY.md
+
+By continuing you acknowledge seeing this notice. All optional background
+checks may remain OFF. You can change them later in DeiLaw settings.

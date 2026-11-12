@@ -1,41 +1,61 @@
-# Code signing policy — PREPARATION DRAFT
+# Code signing policy — DeiLaw / ПОДГОТОВКА
 
-Project: DeiLaw, https://github.com/DeiZiXX/DeiLaw
+**Статус:** проект пока НЕ принят SignPath Foundation. Никакой доступный
+релиз нельзя называть подписанным SignPath, пока не получен реально
+проверенный Authenticode артефакт.
 
-**Current status:** SignPath Foundation has NOT approved or signed DeiLaw. No current artifact should be advertised as SignPath-signed. This policy is a proposal pending rights and compliance review.
+После одобрения проекта официальное упоминание SignPath:
 
-## Intended provider acknowledgement (only after formal approval)
+> Free code signing provided by SignPath.io, certificate by SignPath Foundation
 
-"Free code signing provided by SignPath.io, certificate by SignPath Foundation"
+## Roles / Роли
 
-The certificate would identify SignPath Foundation as publisher, not the developer's personal name.
+- Maintainer / author and reviewer: [@DeiZiXX](https://github.com/DeiZiXX),
+  при условии подтверждения владения и MFA. Вклады других авторов — только через
+  PR с ревью. Для участия независимых ревьюеров их необходимо назначить в GitHub.
+- SignPath release approver: **не назначен**. Владелец должен назначить роль в
+  SignPath после одобрения и требовать ручного одобрения каждого запроса.
+- Signing submitter: GitHub Actions, только с проверенным origin verification,
+  никогда не локальный двоичный файл неизвестного происхождения.
 
-## Team and roles (not yet verified)
+**MFA обязательно** для всех авторов/ревьюеров/утверждающих релизы.
 
-- Candidate source maintainer: repository owner `@DeiZiXX` — verify control and MFA.
-- Reviewers: to be designated; outside contributions require documented review.
-- Release approver(s): to be designated; **every release requires manual signing approval**.
-- Everyone with relevant repository or signing access must use MFA.
+## Signing process
 
-## Intended technical process
+1. Обязательный PR, code review, без force-push, защищённые ветки,
+   проверка изменений сборочных сценариев и зависимостей.
+2. Сборка из конкретного GitHub commit на GitHub-hosted Windows runner с
+   проверкой тестов и сохранением исходного SHA и списка файлов.
+3. GitHub Actions workflow `.github/workflows/signpath-release.yml` формирует
+   сначала бинарный `DeiLaw.exe`, передаёт GitHub artifact в SignPath, ждёт
+   **ручного одобрения**, проверяет Authenticode, а затем собирает NSIS setup,
+   отдельно подписывает и проверяет его в SignPath.
+4. В SignPath администратор настраивает GitHub.com trusted build system,
+   устанавливает SignPath GitHub App, включает origin verification и разрешает
+   только защищённую релизную ветку; артефактные конфигурации для EXE и setup
+   имеют ограничения ProductName=DeiLaw и единой версии.
+5. Публичный выпуск требует отдельно проверенного GPL-3.0-only LICENSE,
+   актуального Third Party Notices, исходного кода и подтверждения прав на
+   проектные аудио/изображения и DLL.
+6. Для **автоматических обновлений** дополнительно требуется проверяемый
+   Ed25519-манифест; Authenticode не заменяет ключ подписи манифеста.
 
-1. Confirm that all shipped components are eligible under OSI-approved licensing; see [licensing audit](docs/LICENSING_AUDIT_0.3.1.md).
-2. Protect the main/release branches and require checks and review; prohibit force pushes into release refs.
-3. Build exclusively from a trusted GitHub Actions Windows workflow, using pinned dependencies, controlled scripts and reproducible provenance. No manual upload of arbitrary unsigned EXE for signing.
-4. After SignPath acceptance, configure the organization's trusted GitHub build system, origin verification, signing policy, artifact configuration, CI token stored only as a GitHub Actions secret, and mandatory release approval.
-5. Sign both `DeiLaw.exe` and `DeiLaw_Setup_v0.3.1.exe` only if the approved artifact configuration permits both. Verify Authenticode and release matching source code/SBOM/license notices.
-6. Keep **separate Ed25519 manifest trust** for the auto-updater. It is not replaced by Authenticode.
-7. If any key, release or CI provenance is compromised, stop publishing and coordinate response/revocation with the provider.
+## Privacy and user choice
 
-The existing `build_release.ps1` expects a developer-owned Windows certificate. It is **not** a working SignPath integration today.
+Политика: [PRIVACY.md](PRIVACY.md). Installer показывает
+[PRIVACY_INSTALL.txt](installer/PRIVACY_INSTALL.txt) и предлагает выбор для
+необязательных фоновых сетевых подключений; их значения по умолчанию — OFF.
+Сетевые запросы по явному действию пользователя описаны в PRIVACY.
+Согласие на облачную авторизацию и условия внешних сервисов проверяется отдельно.
 
-## User privacy and network access
+## Incident handling
 
-[DeiLaw privacy policy](PRIVACY.md). Client features can contact Supabase, Discord, GitHub, external RMRP legislation sources and, through Supabase, OpenAI. Before signing, check installer-time disclosure and genuine ability to disable network transfers not specifically requested by the user, as SignPath Foundation requires. Existing installer behavior is **not yet certified**.
+При компрометации токена, ключа, действий подписи или pipeline приостановить
+подписание и публикацию, сообщить SignPath и пользователям, при необходимости
+отозвать подписанный выпуск. Секреты не помещать в исходники, артефакты или логи.
 
-## References
+## Upstream rules
 
 - https://signpath.org/terms
-- https://signpath.org/apply
-- https://docs.signpath.io/projects
-- https://github.com/SignPath/github-action-submit-signing-request
+- https://docs.signpath.io/trusted-build-systems/github
+- https://docs.signpath.io/origin-verification/

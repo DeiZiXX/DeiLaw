@@ -1,0 +1,111 @@
+# This workflow is intentionally gated and cannot sign without acceptance,
+# SignPath organization/project/token configuration and a manually approved policy.
+name: DeiLaw SignPath approved release
+on:
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: read
+jobs:
+  sign-release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-2022
+    timeout-minutes: 360
+    environment: signpath-production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Release requirements gate
+        shell: pwsh
+        env:
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY: ${{ vars.SIGNPATH_SIGNING_POLICY }}
+          SIGNPATH_CONFIG_APP: ${{ vars.SIGNPATH_CONFIG_APP }}
+          SIGNPATH_CONFIG_SETUP: ${{ vars.SIGNPATH_CONFIG_SETUP }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+        run: |
+          $license = Get-Content LICENSE -Raw
+          if ($license -notmatch 'GNU GENERAL PUBLIC LICENSE') { throw 'GPL-3.0 not yet applied: refusing signature' }
+          foreach($key in @('SIGNPATH_ORGANIZATION_ID','SIGNPATH_PROJECT_SLUG','SIGNPATH_SIGNING_POLICY','SIGNPATH_CONFIG_APP','SIGNPATH_CONFIG_SETUP','SIGNPATH_API_TOKEN')) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($key))) { throw "$key is not configured" }
+          }
+      - name: Install NSIS and venv
+        shell: pwsh
+        run: |
+          choco install nsis --no-progress -y
+          'C:\Program Files (x86)\NSIS' | Out-File -FilePath $env:GITHUB_PATH -Append
+          python -m venv .venv
+      - name: Build unsigned application
+        shell: pwsh
+        run: .\build_app_only.ps1
+      - name: Upload unsigned app EXE for verified signing
+        id: unsigned-app
+        uses: actions/upload-artifact@v4
+        with:
+          name: deilaw-unsigned-exe
+          path: dist/DeiLaw/DeiLaw.exe
+          if-no-files-found: error
+      - name: Sign app EXE (manual release approval in SignPath)
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_CONFIG_APP }}
+          github-artifact-id: ${{ steps.unsigned-app.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 18000
+          output-artifact-directory: signed-app
+      - name: Replace app executable with SignPath signed one
+        shell: pwsh
+        run: |
+          $source = Get-ChildItem signed-app -Filter DeiLaw.exe -Recurse -File
+          if ($source.Count -ne 1) { throw 'Expected exactly one signed DeiLaw.exe' }
+          $signature = Get-AuthenticodeSignature $source[0].FullName
+          if ($signature.Status -ne 'Valid') { throw 'Signed DeiLaw.exe has invalid Authenticode status' }
+          Copy-Item $source[0].FullName dist\DeiLaw\DeiLaw.exe -Force
+      - name: Package NSIS setup containing signed app
+        shell: pwsh
+        run: .\scripts\build_signpath_candidate.ps1 -SkipAppBuild
+      - name: Upload unsigned setup
+        id: unsigned-setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: deilaw-unsigned-setup
+          path: release/DeiLaw_Setup_v0.3.1.exe
+          if-no-files-found: error
+      - name: Sign setup (manual approval in SignPath)
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_CONFIG_SETUP }}
+          github-artifact-id: ${{ steps.unsigned-setup.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 18000
+          output-artifact-directory: signed-setup
+      - name: Verify signed setup
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem signed-setup -Filter DeiLaw_Setup_v0.3.1.exe -Recurse -File
+          if ($setup.Count -ne 1) { throw 'Expected one signed setup' }
+          $signature = Get-AuthenticodeSignature $setup[0].FullName
+          if ($signature.Status -ne 'Valid') { throw 'Setup signature is not valid' }
+          Copy-Item $setup[0].FullName release\DeiLaw_Setup_v0.3.1.exe -Force
+      - name: Upload signed setup and inventory (NOT automatically published)
+        uses: actions/upload-artifact@v4
+        with:
+          name: deilaw-signed-setup-reviewed
+          path: |
+            release/DeiLaw_Setup_v0.3.1.exe
+            release/build_inventory.json
+          if-no-files-found: error
+          retention-days: 30
