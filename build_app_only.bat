@@ -42,7 +42,27 @@ echo Running security and binder tests...
 if errorlevel 1 goto failed
 
 echo Building DeiLaw.exe for Windows...
-"%PYTHON_EXE%" %PYTHON_SWITCH% -m PyInstaller --noconfirm --clean --onedir --windowed --name DeiLaw --version-file "installer\version_info.txt" --icon "installer\assets\deilaw_installer.ico" --add-data "assets;assets" main.py
+set "DEILAW_ICON=%~dp0installer\assets\deilaw_installer.ico"
+set "DEILAW_VERSION=%~dp0installer\version_info.txt"
+set "DEILAW_ASSETS=%~dp0assets"
+set "DEILAW_SPEC_DIR=%~dp0build\generated-spec"
+if not exist "%DEILAW_ICON%" (
+    echo ERROR: Required icon not found: "%DEILAW_ICON%"
+    echo Restore installer\assets from the full DeiLaw source archive.
+    goto failed
+)
+if not exist "%DEILAW_VERSION%" (
+    echo ERROR: Missing version information: "%DEILAW_VERSION%"
+    goto failed
+)
+if not exist "%DEILAW_ASSETS%\" (
+    echo ERROR: Missing assets folder: "%DEILAW_ASSETS%"
+    goto failed
+)
+if not exist "%DEILAW_SPEC_DIR%\" mkdir "%DEILAW_SPEC_DIR%"
+if errorlevel 1 goto failed
+rem Generate spec in build\generated-spec; ignore stale project-root DeiLaw.spec.
+"%PYTHON_EXE%" %PYTHON_SWITCH% -m PyInstaller --noconfirm --clean --onedir --windowed --name DeiLaw --specpath "%DEILAW_SPEC_DIR%" --version-file "%DEILAW_VERSION%" --icon "%DEILAW_ICON%" --add-data "%DEILAW_ASSETS%;assets" "%~dp0main.py"
 if errorlevel 1 goto failed
 
 if not exist "dist\DeiLaw\DeiLaw.exe" (

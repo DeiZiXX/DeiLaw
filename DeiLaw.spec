@@ -7,7 +7,12 @@ ICON_CANDIDATES = [
     ROOT / 'assets' / 'icons' / 'icon256.ico',
     ROOT / 'installer' / 'assets' / 'deilaw_installer.ico',
 ]
-APP_ICON = next((str(p) for p in ICON_CANDIDATES if p.exists()), None)
+APP_ICON = next((str(p.resolve()) for p in ICON_CANDIDATES if p.is_file()), None)
+if APP_ICON is None:
+    raise FileNotFoundError('DeiLaw icon missing: installer/assets/deilaw_installer.ico. Restore installer/assets before building.')
+VERSION_FILE = str((ROOT / 'installer' / 'version_info.txt').resolve())
+if not Path(VERSION_FILE).is_file():
+    raise FileNotFoundError('Windows version metadata missing: installer/version_info.txt')
 
 datas = []
 if (ROOT / 'assets').exists():
@@ -52,7 +57,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=APP_ICON,
-    version='installer/version_info.txt',
+    version=VERSION_FILE,
 )
 
 coll = COLLECT(
