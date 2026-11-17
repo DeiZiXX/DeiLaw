@@ -12,6 +12,7 @@
 - [x] Регрессионные тесты и source integrity проверки.
 - [x] Пример unsigned Windows CI и gated SignPath CI с последовательной подписью EXE и setup.
 - [x] Инвентаризация файлов и библиотек с SHA-256, не равнозначна окончательному аудиту лицензий.
+- [x] Отдельный `release/license_evidence.json`: проверка SHA-256 сохранённых notice и каталог EXE/DLL/PYD; нет автоматического утверждения о соблюдении LGPL/SignPath.
 - [x] Code signing policy и уведомление о статусе подписи на README.
 
 ## Нельзя закрыть без владельца, проверенного CI или решения SignPath
