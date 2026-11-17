@@ -95,7 +95,6 @@ DeiLaw/
 │   └── policy.py                 # правила ответа AI
 ├── updater.py                    # обновление приложения через GitHub Releases
 ├── user_state.py                 # резервные копии и состояние пользователя
-├── sync_laws_to_cloud.py         # ручная синхронизация серверной законки
 ├── supabase/
 │   └── functions/deilaw-ai/
 │       └── index.ts              # исходный код Cloud AI Edge Function
