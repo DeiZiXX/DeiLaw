@@ -35,7 +35,12 @@ class TestSourceSnapshot(unittest.TestCase):
             root = Path(temp)
             self.create_repo(root)
             archive_dir = root / "untracked-output"
-            result = create_source_snapshot(root, archive_dir, "0.3.1")
+            archive_dir.mkdir()
+            installer = archive_dir / "DeiLaw_Setup_v0.3.1.exe"
+            installer.write_bytes(b"unsigned candidate")
+            result = create_source_snapshot(root, archive_dir, "0.3.1", installer)
+            self.assertEqual(result["unsigned_installer_sha256"], sha256(installer))
+            self.assertEqual(result["unsigned_installer_name"], installer.name)
             self.assertEqual(result["scope"], "TRACKED_DEILAW_PROJECT_SOURCES_ONLY")
             self.assertTrue(result["third_party_corresponding_source_not_included"])
             self.assertEqual(result["source_archive_sha256"], sha256(archive_dir / result["source_archive"]))
