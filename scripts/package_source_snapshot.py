@@ -29,7 +29,7 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def create_source_snapshot(root: Path, outdir: Path, version: str) -> dict:
+def create_source_snapshot(root: Path, outdir: Path, version: str, unsigned_installer: Path | None = None) -> dict:
     root = root.resolve()
     outdir = outdir.resolve()
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
@@ -74,6 +74,13 @@ def create_source_snapshot(root: Path, outdir: Path, version: str) -> dict:
         "not_legal_clearance": True,
         "not_signed": True,
     }
+    if unsigned_installer is not None:
+        installer = unsigned_installer.resolve()
+        if not installer.is_file() or installer.name != f"DeiLaw_Setup_v{version}.exe":
+            raise ValueError("Unsigned installer does not match the source snapshot version")
+        evidence["unsigned_installer_name"] = installer.name
+        evidence["unsigned_installer_sha256"] = sha256(installer)
+        evidence["unsigned_installer_bytes"] = installer.stat().st_size
     (outdir / "source_provenance.json").write_text(
         json.dumps(evidence, indent=2, ensure_ascii=False) + "\n", encoding="utf-8",
     )
@@ -81,11 +88,11 @@ def create_source_snapshot(root: Path, outdir: Path, version: str) -> dict:
 
 
 def main() -> int:
-    if len(sys.argv) != 3:
-        print("Usage: python scripts/package_source_snapshot.py OUTPUT_DIR VERSION", file=sys.stderr)
+    if len(sys.argv) != 4:
+        print("Usage: python scripts/package_source_snapshot.py OUTPUT_DIR VERSION UNSIGNED_SETUP.exe", file=sys.stderr)
         return 2
     root = Path(__file__).resolve().parent.parent
-    result = create_source_snapshot(root, Path(sys.argv[1]), sys.argv[2])
+    result = create_source_snapshot(root, Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3]))
     print("Exact tracked project source archived:", result["source_commit"])
     print("Third-party Qt/Python/OpenSSL corresponding sources still need independent review")
     return 0
