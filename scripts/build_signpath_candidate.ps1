@@ -25,6 +25,8 @@ $Setup = Join-Path $Release "DeiLaw_Setup_v$Version.exe"
 if (!(Test-Path -LiteralPath $Setup)) { throw "Installer missing: $Setup" }
 & $Python scripts\build_inventory.py dist\DeiLaw release\build_inventory.json
 if ($LASTEXITCODE -ne 0) { throw 'Inventory failed.' }
+& $Python scripts\package_source_snapshot.py release $Version
+if ($LASTEXITCODE -ne 0) { throw 'Git-committed source snapshot packaging failed.' }
 & $Python scripts\classify_native_components.py release\build_inventory.json release\component_review.json
 if ($LASTEXITCODE -ne 0) { throw 'Native component inventory failed.' }
 & $Python scripts\review_windows_bundle.py dist\DeiLaw release\license_evidence.json
