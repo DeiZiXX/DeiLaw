@@ -17,6 +17,7 @@ class PackagingChecks(unittest.TestCase):
                        'WriteUninstaller', 'Section "Uninstall"'):
             self.assertIn(needle, s)
         self.assertNotIn('RMDir /r "$INSTDIR"',s)
+        self.assertIn('RMDir /r "$INSTDIR\\\\THIRD_PARTY_LICENSES"', s)
         self.assertIn('"/S"', (ROOT/'updater.py').read_text(encoding='utf-8'))
 
     def test_nsis_utf8_cyrillic_and_legacy_inno_guard(self):
