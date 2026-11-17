@@ -123,6 +123,9 @@ jobs:
           if ($setup.Count -ne 1) { throw 'Expected one signed setup' }
           $signature = Get-AuthenticodeSignature $setup[0].FullName
           if ($signature.Status -ne 'Valid') { throw 'Setup signature is not valid' }
+          if (-not $signature.SignerCertificate -or $signature.SignerCertificate.Subject -notmatch 'SignPath Foundation') {
+            throw 'Expected SignPath Foundation Authenticode signer for setup'
+          }
           Copy-Item $setup[0].FullName release\DeiLaw_Setup_v0.3.1.exe -Force
       - name: Upload signed setup and inventory (NOT automatically published)
         uses: actions/upload-artifact@v4
