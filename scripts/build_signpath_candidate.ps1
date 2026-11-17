@@ -25,5 +25,7 @@ $Setup = Join-Path $Release "DeiLaw_Setup_v$Version.exe"
 if (!(Test-Path -LiteralPath $Setup)) { throw "Installer missing: $Setup" }
 & $Python scripts\build_inventory.py dist\DeiLaw release\build_inventory.json
 if ($LASTEXITCODE -ne 0) { throw 'Inventory failed.' }
+& $Python scripts\review_windows_bundle.py dist\DeiLaw release\license_evidence.json
+if ($LASTEXITCODE -ne 0) { throw 'Bundled license evidence integrity check failed.' }
 Write-Host "UNSIGNED candidate: $Setup" -ForegroundColor Yellow
 Write-Host 'Do not publish it as signed or approved by SignPath.'
