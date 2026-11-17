@@ -87,6 +87,9 @@ jobs:
           if ($source.Count -ne 1) { throw 'Expected exactly one signed DeiLaw.exe' }
           $signature = Get-AuthenticodeSignature $source[0].FullName
           if ($signature.Status -ne 'Valid') { throw 'Signed DeiLaw.exe has invalid Authenticode status' }
+          if (-not $signature.SignerCertificate -or $signature.SignerCertificate.Subject -notmatch 'SignPath Foundation') {
+            throw 'Expected SignPath Foundation Authenticode signer for DeiLaw.exe'
+          }
           Copy-Item $source[0].FullName dist\DeiLaw\DeiLaw.exe -Force
       - name: Package NSIS setup containing signed app
         shell: pwsh
