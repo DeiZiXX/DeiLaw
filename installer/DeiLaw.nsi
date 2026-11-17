@@ -147,6 +147,8 @@ Section "Uninstall"
   Delete "$INSTDIR\THIRD_PARTY_NOTICES.md"
   RMDir /r "$INSTDIR\_internal"
   RMDir /r "$INSTDIR\assets"
+  ; Notices are installed at the application root, not inside _internal.
+  RMDir /r "$INSTDIR\THIRD_PARTY_LICENSES"
   Delete "$INSTDIR\Uninstall.exe"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\DeiLaw"
   DeleteRegKey HKCU "Software\DeiLaw"
