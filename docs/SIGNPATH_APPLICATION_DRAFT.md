@@ -1,69 +1,50 @@
-# SignPath Foundation: проект заявки для DeiLaw (НЕ ОТПРАВЛЕНА)
+# SignPath Foundation — актуальный проект заявки DeiLaw (НЕ ОТПРАВЛЕНА)
 
-- Name: DeiLaw, Windows legal/RP companion for RMRP players (unofficial).
-- Repository: https://github.com/DeiZiXX/DeiLaw
-- Main source version: 0.3.1. Last verified GitHub release was `v0.3.0`; версия `0.3.1` не является доказанным подписанным релизом.
-- Owner candidate: `@DeiZiXX` (подтвердить владельца и MFA).
-- Planned OSS license: GPL-3.0-only **not yet applied**, current: All rights reserved.
-- Files proposed for signing: `DeiLaw.exe`, `DeiLaw_Setup_v0.3.1.exe`.
-- Policy: [CODE_SIGNING_POLICY.md](../CODE_SIGNING_POLICY.md)
-- Privacy: [PRIVACY.md](../PRIVACY.md)
+Дата обновления: 18.11.2026. **Не утверждать, что SignPath одобрил проект, выдал сертификат или что подписанный релиз существует.** Это подготовленный текст для официальной заявки после закрытия юридических и технических блокеров.
 
-## Требования и остающиеся доказательства
+## Application / project identity
 
-| Условие SignPath | Оценка |
-| --- | --- |
-| Только OSI-одобренные компоненты и отсутствие proprietary-компонентов | БЛОКЕР: текущий `LICENSE`, остаётся независимая проверка возможных сторонних элементов медиа (владелец подтвердил их открытое использование 12.11.2026), неоднозначный статус runtime Inno Setup |
-| Реальный поддерживаемый выпущенный OSS-проект | ЧАСТИЧНО: публичный репозиторий и старые релизы есть; OSS-лицензии пока нет, репутацию оценивает SignPath |
-| Подпись только своих бинарников из своих источников | НЕТ полного SBOM и доказанной сборки; сторонние DLL отдельно |
-| Доверенная CI / origin verification | Ещё не настроены |
-| MFA, авторы, ревьюеры, апруверы | Владелец должен подтвердить настройки; подписывание вручную для каждого релиза |
-| Ссылка на code signing policy на странице проекта/загрузок | Черновик подготовлен; после принятия добавить в README и Releases |
-| Privacy policy при установке + возможность отказаться от необязательных сетевых передач | Privacy.md есть, но установщик ещё не подтверждает соответствие этим требованиям |
-| Единые ProductName/ProductVersion; чистая деинсталляция | Исходники содержат 0.3.1 и Inno Setup uninstall, требуется тест готового Windows EXE |
+- **Project:** DeiLaw — open-source Windows desktop companion for role-play users of RMRP, independently developed and not affiliated with RMRP.
+- **Repository and source:** https://github.com/DeiZiXX/DeiLaw
+- **Maintainer:** GitHub account @DeiZiXX (proof of repo control via connected GitHub; 2FA still to be verified by owner).
+- **License target:** GNU GPL version 3 only, SPDX `GPL-3.0-only`, for owned DeiLaw code and eligible media only. Full LICENSE exists in **draft PR #1**, not yet in main.
+- **Current GitHub source application version:** 0.3.1 (`app_version.py`); do not infer which version the owner's installed Windows application is running. Some older docs mention 0.3.5rc builds; align release version and actual source before publication.
+- **User-facing functionality:** RMRP statutes search, local notes, role-play calculators, quick overlays, opt-in law synchronisation, optional Cloud AI, user reports/reviews and Discord login.
+- **Privacy statement:** https://github.com/DeiZiXX/DeiLaw/blob/main/PRIVACY.md (the GPL candidate contains a newer policy in PR #1; update on main after clearance).
+- **Code signing policy:** https://github.com/DeiZiXX/DeiLaw/blob/main/CODE_SIGNING_POLICY.md (candidate policy in PR #1).
+- **Proposed signed artifacts:** `DeiLaw.exe` and `DeiLaw_Setup_v<version>.exe`. Do not sign unsigned third-party Qt or Microsoft DLLs as if DeiLaw authored them.
+- **Workflow:** `.github/workflows/signpath-release.yml`, GitHub-hosted Windows runner, manually gated, separate signing of application and NSIS setup.
+- **Release history:** earlier GitHub release v0.3.0 existed according to repository preparation records; an already released, complete, GPL-licensed version still must be verified.
 
-## Вопрос для SignPath до заявления «готово»
+## Verifiable CI evidence available BEFORE submitting
 
-'Our project uses GPLv3-licensed PyQt6 and will publish all owned source code. Our Windows setup uses Inno Setup (SPDX `InnoSetup`, separate upstream license). Does its bundled setup runtime satisfy your policy that all shipped components use OSI-approved licenses? If not, we will choose another installer.'
+- [CI run #44158776436](https://github.com/DeiZiXX/DeiLaw/actions/runs/44158776436): 112 automated tests passed; PyInstaller EXE and NSIS setup assembled, unsigned.
+- Silent Windows install, reinstall and uninstall smoke passed, preserving user preferences and `data/`.
+- 282 build files; 61 upstream Python-wheel license notices verified by SHA-256; 105 native EXE/DLL/PYD files categorized, not fully license-cleared.
+- A subsequent CI version includes `DeiLaw_Source_v0.3.1.zip` from exact Git HEAD with `source_provenance.json` binding source and unsigned installer hashes. Verify its run success before citing this as completed.
 
-## Рекомендуемые шаги
+## Not yet cleared — cannot truthfully mark eligible
 
-1. Владелец подтвердил разрешение на открытое использование 12 медиафайлов; проверить возможные чужие элементы, оригинальность кода и права на материалы RMRP.
-2. Выбрать допустимый установщик; составить полный SBOM Windows DLL и лицензий.
-3. Перевести собственный код на GPL-3.0-only отдельным проверенным PR; приложить notices и исходники соответствующего бинарного релиза.
-4. Настроить trusted Windows GitHub Actions build, защиту релизной ветки, тесты и MFA.
-5. Подготовить installer-time privacy disclosure и пользовательский выбор для необязательной передачи данных.
-6. Подать https://signpath.org/apply, после одобрения интегрировать официальный SignPath CI Action, origin-verification и ручной approve каждого выпуска.
+- Rights on all original code, 12 media files and contributions by other authors; human owner review form: [OWNER_RIGHTS_REVIEW.md](OWNER_RIGHTS_REVIEW.md).
+- Full Qt LGPL/GPL notice and corresponding source/replacement instructions; OpenSSL/CPython and Microsoft CRT/GPL System Libraries treatment; actual bundle audit: [PHASE3_RELEASE_GATE.md](PHASE3_RELEASE_GATE.md).
+- SignPath's statement against commercial dual licensing: **PyQt6 is distributed under GPLv3 or a separate commercial license**. Get written confirmation of whether use of its GPLv3 distribution as a dependency meets the Foundation's eligibility rule. Do not assume either acceptance or rejection.
+- An official public GPL release from fully matched source, interactive GUI/privacy verification and a GitHub `main` that contains the approved license.
+- MFA, protected GitHub branch/rulesets, actual reviewers and release approver, trusted-build project/app, policy/configuration and SignPath token; these require account-owner and SignPath permissions.
 
-**Ничего не подписано и не сертифицировано этим документом.**
+## Suggested concise eligibility question to SignPath
 
+> We maintain DeiLaw, an open-source GPL-3.0-only Windows desktop utility distributed from our public GitHub repository. Our Python application uses the **GPLv3 edition** of PyQt6, while upstream PyQt6 offers a separate commercial license. The installer is NSIS/zlib; Qt DLLs are dynamically linked and supplied as upstream OSS binaries. Some Python/Windows redistributable runtime DLLs may qualify as GPLv3 System Libraries. Does this dependency model meet the Foundation's requirement for OSI-approved licensing without commercial dual-licensing? Which notices, corresponding sources and System Libraries evidence should be supplied for acceptance?
 
-## Уточнение по проверке 12.11.2026
+## Submission and post-approval controls
 
-- Лицензионный аудит исходной сборки: 95 тестов OK, все 12 медиафайлов доступны и открываются. Это **не проверка готового Windows-дистрибутива**.
-- Inno Setup: `InnoSetup` является отдельной лицензией и не обозначена как OSI-approved в SPDX. **Приостановить заявку** до ответа SignPath или перевода упаковки на компоненты с подходящей лицензией.
-- `DeiLaw.iss` не показывает политику приватности при установке и не даёт opt-out для необязательных сетевых функций; `ui/main_window.py` принудительно включает автоопрос обновлений. **Исправить до заявки.**
-- `build_release.ps1` требует личный сертификат; SignPath CI не интегрирован и не тестировался. Требуется подтверждённая Windows CI-сборка и перечень реальных DLL.
-- Подробный протокол: [SIGNPATH_VERIFICATION_20261112.md](SIGNPATH_VERIFICATION_20261112.md).
+1. Complete rights/license and GUI/privacy review; publicize the GPL release with exact matching source and notice texts.
+2. Enable MFA and branch protection/rulesets, document reviewers and approvers in [CODE_SIGNING_POLICY.md](../CODE_SIGNING_POLICY.md).
+3. Owner submits [official application](https://signpath.org/apply). **Submission has not taken place in this preparation**; response and reputation check belong to SignPath Foundation.
+4. Once approved, create the Foundation organization/project, trusted build system GitHub.com, authorize SignPath GitHub App, create signing policy and two artifact configurations with metadata checks.
+5. Store token only in GitHub secret and IDs as repository/environment variables, require protected environment reviewer, perform verified-origin sign and manually approve **every** request.
+6. Verify both Authenticode signatures, bind signed installer to source provenance, issue a release with matching source and licenses. Prepare offline Ed25519 key on owner's Windows PC, never in CI or a chat.
 
+Official terms: https://signpath.org/terms
+GitHub integration: https://docs.signpath.io/trusted-build-systems/github
 
-## Изменения 13.11.2026 — заявка всё ещё НЕ отправлена
-
-- Inno Setup **планируется заменить** NSIS/zlib в будущей подписываемой сборке:
-  `installer/DeiLaw.nsi` и `scripts/build_signpath_candidate.ps1` подготовлены.
-  До проверки собранного setup в Windows нельзя отмечать этот критерий выполненным.
-- Privacy: подготовлена страница уведомления в установщике и необязательные opt-in
-  на фоновые проверки GitHub, RMRP и Supabase. Ручные сетевые запросы, включая
-  обязательный на данном этапе облачный вход, описаны в обновлённой Privacy policy;
-  это ещё требуется согласовать с критериями SignPath.
-- GitHub Actions: source-only workflow для unsigned кандидата и gated SignPath workflow
-  с двумя последовательными запросами подписи. **Не проверен на runner**, SignPath
-  токен/проекты, правила origin verification и утверждающие не настроены.
-- `LICENSE` всё ещё All rights reserved; предложенная GPL находится отдельно
-  в `docs/GPL-3.0-PROPOSED.txt`, правовая проверка ещё не завершена.
-- Контрольный перечень до реальной заявки: [SIGNPATH_FINAL_GATE.md](SIGNPATH_FINAL_GATE.md).
-
-
-## Статус второго этапа — 18.11.2026
-
-В публичной ветке подготовки PR №1 внесён полный текст GPL-3.0-only (корневой `LICENSE`). В **main**, откуда выпущены прежние версии, сохраняется All rights reserved, а SignPath ещё не одобрял проект. Для библиотек добавлен `scripts/collect_runtime_licenses.py`, содержащий проверяемые хеши существующих wheel-license файлов. Проверка третьих DLL и лицензий Qt/OpenSSL в новом установщике ещё нужна. Нельзя подавать заявку как на полностью сертифицированный и подписанный релиз.
+**Status: candidate only. Application not submitted; official approval, certificate and code signing not obtained.**
