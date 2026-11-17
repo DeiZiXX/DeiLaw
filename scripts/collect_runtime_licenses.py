@@ -50,28 +50,31 @@ def collect_licenses(dest: Path, distributions=None) -> dict:
         path_component = re.sub(r"[^A-Za-z0-9._-]", "_", f"{norm}-{version}")
         package_root = dest / path_component
         preserved = []
+        seen_notice_paths = set()
         for entry in dist.files or []:
             as_posix = entry.as_posix()
             parts = entry.parts
-            if not parts or ".dist-info" not in as_posix.lower():
+            # Nested vendored .dist-info folders can contain DIFFERENT LICENSE
+            # files with the same basename. Keep their entire wheel-relative
+            # paths to avoid overwriting or misrepresenting the upstream text.
+            if not parts or not any(p.lower().endswith(".dist-info") for p in parts):
                 continue
-            # Packaging metadata is not a licensed source distribution itself;
-            # only preserve exact recognized upstream NOTICE/LICENSE files.
             leaf = parts[-1]
             if not POSSIBLE_LICENSE_FILE.match(leaf):
+                continue
+            relative = Path(as_posix)
+            if relative.is_absolute() or any(p in ("", ".", "..") for p in relative.parts):
+                continue
+            relative_name = relative.as_posix()
+            if relative_name in seen_notice_paths:
                 continue
             src = Path(dist.locate_file(entry))
             if not src.is_file() or src.stat().st_size > 2_000_000:
                 continue
-            # Preserve path relative to its dist-info folder; disallow traversal.
-            suffix = as_posix.split(".dist-info/", 1)
-            relative = suffix[1] if len(suffix) > 1 else leaf
-            relative_parts = Path(relative).parts
-            if any(x in ("", ".", "..") for x in relative_parts):
-                continue
-            out = package_root.joinpath(*relative_parts)
+            out = package_root.joinpath(*relative.parts)
             out.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(src, out)
+            seen_notice_paths.add(relative_name)
             preserved.append({
                 "file": out.relative_to(dest).as_posix(),
                 "sha256": hashlib.sha256(out.read_bytes()).hexdigest(),
