@@ -65,7 +65,7 @@ Function .onInit
   IfFileExists "$INSTDIR\unins000.exe" 0 init_done
     IfSilent 0 +2
       Abort
-    MessageBox MB_ICONSTOP|MB_OK "Обнаружена старая установка DeiLaw (Inno Setup). Сохраните папку data и удалите старую версию через Windows перед установкой новой."
+    MessageBox MB_ICONSTOP|MB_OK "Обнаружена прежняя версия DeiLaw (Inno Setup). Чтобы сохранить личные настройки, сначала скопируйте папку data в безопасное место. Затем удалите старый DeiLaw через Параметры Windows → Приложения и запустите новый установщик. Автоматически удалять старую версию небезопасно."
     Abort
   init_done:
 FunctionEnd
