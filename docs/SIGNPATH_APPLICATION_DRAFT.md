@@ -7,7 +7,7 @@
 - **Project:** DeiLaw — open-source Windows desktop companion for role-play users of RMRP, independently developed and not affiliated with RMRP.
 - **Repository and source:** https://github.com/DeiZiXX/DeiLaw
 - **Maintainer:** GitHub account @DeiZiXX (proof of repo control via connected GitHub; 2FA still to be verified by owner).
-- **License target:** GNU GPL version 3 only, SPDX `GPL-3.0-only`, for owned DeiLaw code and eligible media only. Full LICENSE exists in **draft PR #1**, not yet in main.
+- **Source license:** GNU GPL version 3 only, SPDX `GPL-3.0-only`, for owned DeiLaw code and eligible media. Source-only publication is authorized by owner via PR №1; verify release tag and final `main` commit before submitting the Foundation application. Third-party libraries retain their own licenses.
 - **Current GitHub source application version:** 0.3.1 (`app_version.py`); do not infer which version the owner's installed Windows application is running. Some older docs mention 0.3.5rc builds; align release version and actual source before publication.
 - **User-facing functionality:** RMRP statutes search, local notes, role-play calculators, quick overlays, opt-in law synchronisation, optional Cloud AI, user reports/reviews and Discord login.
 - **Privacy statement:** https://github.com/DeiZiXX/DeiLaw/blob/main/PRIVACY.md (the GPL candidate contains a newer policy in PR #1; update on main after clearance).
