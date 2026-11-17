@@ -28,7 +28,7 @@
 - Rights on all original code, 12 media files and contributions by other authors; human owner review form: [OWNER_RIGHTS_REVIEW.md](OWNER_RIGHTS_REVIEW.md).
 - Full Qt LGPL/GPL notice and corresponding source/replacement instructions; OpenSSL/CPython and Microsoft CRT/GPL System Libraries treatment; actual bundle audit: [PHASE3_RELEASE_GATE.md](PHASE3_RELEASE_GATE.md).
 - SignPath's statement against commercial dual licensing: **PyQt6 is distributed under GPLv3 or a separate commercial license**. Get written confirmation of whether use of its GPLv3 distribution as a dependency meets the Foundation's eligibility rule. Do not assume either acceptance or rejection.
-- An official public GPL release from fully matched source, interactive GUI/privacy verification and a GitHub `main` that contains the approved license.
+- **For Foundation application:** verify a publicly published GPL source release on `main`, and separately complete the interactive Windows GUI/privacy checks and binary third-party compliance before claiming binary readiness.
 - MFA, protected GitHub branch/rulesets, actual reviewers and release approver, trusted-build project/app, policy/configuration and SignPath token; these require account-owner and SignPath permissions.
 
 ## Suggested concise eligibility question to SignPath
