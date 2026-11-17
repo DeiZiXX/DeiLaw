@@ -18,7 +18,8 @@ if (!(Test-Path -LiteralPath $Exe)) { throw 'DeiLaw.exe was not built.' }
 $Release = Join-Path $Root 'release'
 New-Item -ItemType Directory -Force -Path $Release | Out-Null
 # This builds an UNSIGNED candidate. Only SignPath can sign after project acceptance.
-& $NsisCompiler "/V2" "/DAPP_VERSION=$Version" "/DDEILAW_SOURCE=$Root\dist\DeiLaw" "/DDEILAW_OUTPUT=$Release" (Join-Path $Root 'installer\DeiLaw.nsi')
+# Force UTF-8 for BOM-less NSIS sources: without this Russian UI becomes mojibake on Western-locale CI runners.
+& $NsisCompiler "/INPUTCHARSET" "UTF8" "/V2" "/DAPP_VERSION=$Version" "/DDEILAW_SOURCE=$Root\dist\DeiLaw" "/DDEILAW_OUTPUT=$Release" (Join-Path $Root 'installer\DeiLaw.nsi')
 if ($LASTEXITCODE -ne 0) { throw 'NSIS compilation failed.' }
 $Setup = Join-Path $Release "DeiLaw_Setup_v$Version.exe"
 if (!(Test-Path -LiteralPath $Setup)) { throw "Installer missing: $Setup" }
