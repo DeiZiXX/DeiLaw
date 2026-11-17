@@ -179,8 +179,12 @@ Supabase publishable key, используемый desktop-клиентом, я�
 
 Политика подготовки к подписи: [Code signing policy](CODE_SIGNING_POLICY.md).
 Проект **пока не одобрен SignPath Foundation и не имеет подписанного релиза**.
-Подготовка лицензионных прав: [GPL plan](docs/GPL3_TRANSITION_PLAN.md) и
-[license audit](docs/LICENSING_AUDIT_0.3.1.md).
+Подготовка лицензионных прав: [GPL plan](docs/GPL3_TRANSITION_PLAN.md),
+[license audit](docs/LICENSING_AUDIT_0.3.1.md), [SignPath application draft](docs/SIGNPATH_APPLICATION_DRAFT.md).
+
+В проверочной Windows-сборке формируются архив соответствующих **собственных** исходников и `source_provenance.json` с SHA-256, привязанные к коммиту. Полные исходники и лицензии сторонних Qt/OpenSSL/CPython компонентов всё ещё требуют проверки и предоставления на условиях их лицензий. Офлайн-инструкция для ключа обновлений: [RELEASE_CRYPTO_SETUP.md](docs/RELEASE_CRYPTO_SETUP.md). Не передавайте приватный ключ через GitHub/чат.
+
+**Важное соответствие версий:** исходный `app_version.py` в PR имеет версию `0.3.1`. Нельзя подписывать или публиковать установщик другой версии под исходным кодом `0.3.1`; сначала нужно сверить реально выпускаемую версию с исходниками и сборкой.
 
 Новый открытый сценарий установщика: `installer/DeiLaw.nsi` (NSIS),
 проверяемая Windows-сборка: `.github/workflows/windows-build.yml`.
