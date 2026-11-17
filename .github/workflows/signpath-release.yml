@@ -91,6 +91,9 @@ jobs:
       - name: Package NSIS setup containing signed app
         shell: pwsh
         run: .\scripts\build_signpath_candidate.ps1 -SkipAppBuild
+      - name: Smoke-test packaged setup before submitting it to SignPath
+        shell: pwsh
+        run: .\scripts\test_nsis_install.ps1 -Installer .\release\DeiLaw_Setup_v0.3.1.exe
       - name: Upload unsigned setup
         id: unsigned-setup
         uses: actions/upload-artifact@v4
