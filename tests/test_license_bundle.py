@@ -35,6 +35,27 @@ class TestLicenseCollection(unittest.TestCase):
             path = d / "distribution" / result["packages"][1]["license_files"][0]["file"]
             self.assertEqual(path.read_text(encoding="utf-8"), "Example MIT license notice")
 
+    def test_nested_vendor_notices_do_not_overwrite_each_other(self):
+        with tempfile.TemporaryDirectory() as folder:
+            d = Path(folder)
+            dist = FakeDist(d, "setuptools")
+            vendor_files = [
+                Path("setuptools/_vendor/a-1.0.dist-info/licenses/LICENSE"),
+                Path("setuptools/_vendor/b-1.0.dist-info/licenses/LICENSE"),
+            ]
+            for index, file in enumerate(vendor_files):
+                dist.files.append(file)
+                src = dist.locate_file(file)
+                src.parent.mkdir(parents=True, exist_ok=True)
+                src.write_text(f"Vendor {index} license", encoding="utf-8")
+            result = collect_licenses(d / "out", [dist])
+            records = result["packages"][0]["license_files"]
+            self.assertEqual(len(records), 3)
+            paths = [item["file"] for item in records]
+            self.assertEqual(len(set(paths)), 3)
+            self.assertIn("Vendor 0 license", (d / "out" / paths[1]).read_text(encoding="utf-8"))
+            self.assertIn("Vendor 1 license", (d / "out" / paths[2]).read_text(encoding="utf-8"))
+
     def test_missing_license_is_not_fabricated(self):
         with tempfile.TemporaryDirectory() as folder:
             d = Path(folder)
