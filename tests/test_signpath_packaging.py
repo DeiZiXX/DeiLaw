@@ -25,6 +25,8 @@ class PackagingChecks(unittest.TestCase):
         installer = (ROOT / 'installer/DeiLaw.nsi').read_text(encoding='utf-8')
         self.assertIn('"/INPUTCHARSET" "UTF8"', build)
         self.assertIn('scripts\\review_windows_bundle.py', build)
+        self.assertIn("$AppMeta.ProductName -ne 'DeiLaw'", build)
+        self.assertIn('$AppMeta.ProductVersion -ne $Version', build)
         self.assertIn('Unicode true', installer)
         self.assertIn('Обнаружена прежняя версия DeiLaw', installer)
         self.assertIn('IfFileExists "$INSTDIR\\unins000.exe"', installer)
@@ -39,6 +41,7 @@ class PackagingChecks(unittest.TestCase):
             self.assertIn(needle, s)
         self.assertIn('SIGNPATH_REVIEWED_SHA -cne $env:GITHUB_SHA', s)
         self.assertIn('SIGNPATH_RIGHTS_ACK', s)
+        self.assertEqual(s.count('Expected SignPath Foundation Authenticode signer'), 2)
         self.assertIn('scripts/review_windows_bundle.py', s)
 
     def test_inventory_sha256_and_no_file_write(self):
