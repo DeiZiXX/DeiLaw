@@ -95,7 +95,6 @@ DeiLaw/
 │   └── policy.py                 # правила ответа AI
 ├── updater.py                    # обновление приложения через GitHub Releases
 ├── user_state.py                 # резервные копии и состояние пользователя
-├── sync_laws_to_cloud.py         # ручная синхронизация серверной законки
 ├── supabase/
 │   └── functions/deilaw-ai/
 │       └── index.ts              # исходный код Cloud AI Edge Function
@@ -134,25 +133,13 @@ python main.py
 
 При первом запуске локальная база может отсутствовать или быть пустой — её можно заполнить штатным обновлением законодательства в интерфейсе.
 
-## Сборка Windows
-
-**Рекомендованный путь для нового исходного GPL-выпуска:** `build_app_only.bat` (или `build_app_only.ps1`) создаёт `dist/DeiLaw/DeiLaw.exe` из данного исходного дерева. Для установки используется `installer/DeiLaw.nsi` (NSIS/zlib), а `scripts/build_signpath_candidate.ps1` автоматизирует сборку неподписанного кандидата вместе с исходным архивом и контрольными суммами. Для NSIS нужен установленный компилятор NSIS; для Python — зависимости из `requirements.txt` и `requirements-build.txt`.
-
-```powershell
-python scripts/verify_source.py
-python -m unittest discover -s tests -q
-.\scripts\build_signpath_candidate.ps1
-```
-
-Готовый установщик: `release/DeiLaw_Setup_v0.3.1.exe`; исходный архив: `release/DeiLaw_Source_v0.3.1.zip` и `release/source_provenance.json`. Эти файлы — **неподписанные кандидаты для тестирования**. Старые `build_release.*`, `installer/DeiLaw.iss` и `DeiLaw.spec` сохраняются в целях совместимости/истории и не являются рекомендованным путём нового GPL-релиза.
-
-**Правила публикации:** исходный код можно распространять в пределах прав правообладателя по GPL-3.0-only. Прежде чем публиковать Windows-установщик как официальный, необходимо выполнить условия Qt/LGPL и остальных сторонних лицензий, проверить GUI и конфиденциальность. [Инструкция публикации исходников](docs/SOURCE_RELEASE_GUIDE_0.3.1.md); [заметки о GPL-выпуске исходников](docs/SOURCE_RELEASE_NOTES_0.3.1.md).
+Инструкция для сопровождающего проекта: [подготовка выпуска исходного кода DeiLaw](docs/SOURCE_RELEASE_GUIDE_0.3.1.md).
 
 ## Данные и конфиденциальность
 
 Пользовательские настройки, локальная SQLite-база, логи, идентификатор установки, история и резервные копии являются runtime-данными и не должны коммититься в Git. Для этого в репозитории настроен `.gitignore`.
 
-Community-функции используют локально созданный ID установки. На Windows также формируется односторонний salted SHA-256 хэш на основе MachineGuid; исходный MachineGuid клиент по своему коду не отправляет. Подробности: [`PRIVACY.md`](PRIVACY.md).
+Community-функции используют локально созданный ID установки. На Windows также формируется односторонний salted SHA-256 хэш на основе MachineGuid; исходный MachineGuid клиент по своему коду не отправляет. Подробности: [`PRIVACY.md`](PRIVACY.md). Правила безопасной публикации исходников: [`docs/PUBLIC_SOURCE_SECURITY.md`](docs/PUBLIC_SOURCE_SECURITY.md).
 
 ## Безопасность и секреты
 

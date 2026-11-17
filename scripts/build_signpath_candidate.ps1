@@ -7,6 +7,9 @@ Set-Location -LiteralPath (Join-Path $PSScriptRoot '..')
 $Root = (Get-Location).Path
 $Python = Join-Path $Root '.venv\Scripts\python.exe'
 if (!(Test-Path -LiteralPath $Python)) { $Python = 'python' }
+# Release gate: reject tracked secrets, private user files or internal operational documents.
+& $Python scripts\audit_public_source.py
+if ($LASTEXITCODE -ne 0) { throw 'Public source release audit failed. Fix it before building.' }
 $Version = (& $Python -c 'from app_version import APP_VERSION; print(APP_VERSION)').Trim()
 if ($LASTEXITCODE -ne 0 -or $Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid stable version.' }
 if (-not $SkipAppBuild) {
