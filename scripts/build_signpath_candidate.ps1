@@ -15,6 +15,10 @@ if (-not $SkipAppBuild) {
 }
 $Exe = Join-Path $Root 'dist\DeiLaw\DeiLaw.exe'
 if (!(Test-Path -LiteralPath $Exe)) { throw 'DeiLaw.exe was not built.' }
+$AppMeta = (Get-Item -LiteralPath $Exe).VersionInfo
+if ($AppMeta.ProductName -ne 'DeiLaw' -or $AppMeta.ProductVersion -ne $Version) {
+    throw "App metadata does not match DeiLaw/$Version; refusing release candidate"
+}
 $Release = Join-Path $Root 'release'
 New-Item -ItemType Directory -Force -Path $Release | Out-Null
 # This builds an UNSIGNED candidate. Only SignPath can sign after project acceptance.
