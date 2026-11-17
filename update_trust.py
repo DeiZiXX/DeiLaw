@@ -29,7 +29,14 @@ def signed_manifest_bytes(manifest):
     name = str(manifest["installer_asset"])
     if not name.lower().endswith(".exe") or "/" in name or "\\" in name or name.startswith("."):
         raise UntrustedUpdateError("Недопустимое имя установщика.")
+    # 'mandatory' changes whether the client can defer an update. An
+    # unsigned flag would let an attacker turn an optional update into a
+    # mandatory one without invalidating the Ed25519 signature.
+    mandatory = manifest.get("mandatory", False)
+    if type(mandatory) is not bool:
+        raise UntrustedUpdateError("Некорректный признак обязательного обновления.")
     payload = {name: manifest[name] for name in fields}
+    payload["mandatory"] = mandatory
     return json.dumps(
         payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
     ).encode("utf-8")
