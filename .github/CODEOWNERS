@@ -1,0 +1,11 @@
+# Maintainer ownership for DeiLaw. GitHub can request reviews of third-party PRs.
+# This does not configure branch protection or replace a human review.
+/* @DeiZiXX
+/.github/workflows/ @DeiZiXX
+/installer/ @DeiZiXX
+/scripts/ @DeiZiXX
+/CODE_SIGNING_POLICY.md @DeiZiXX
+/PRIVACY.md @DeiZiXX
+/LICENSE @DeiZiXX
+/requirements.txt @DeiZiXX
+/requirements-build.txt @DeiZiXX
