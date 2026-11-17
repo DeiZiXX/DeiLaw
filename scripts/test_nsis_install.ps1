@@ -13,8 +13,10 @@ if (Test-Path -LiteralPath $SandboxRoot) { throw 'Smoke-test sandbox already exi
 New-Item -ItemType Directory -Path $SandboxRoot | Out-Null
 
 function Invoke-Installer {
-    & $Installer '/S' "/D=$InstallDir"
-    if ($LASTEXITCODE -ne 0) { throw "NSIS install failed: $LASTEXITCODE" }
+    # A GUI-subsystem EXE may run asynchronously under PowerShell's call operator,
+    # leaving LASTEXITCODE unset. Start-Process -Wait observes its actual exit.
+    $run = Start-Process -FilePath $Installer -ArgumentList @('/S', "/D=$InstallDir") -Wait -PassThru
+    if ($run.ExitCode -ne 0) { throw "NSIS install failed: $($run.ExitCode)" }
 }
 try {
     # Silent mode tests default-deny preferences. Privacy GUI still requires
@@ -40,8 +42,8 @@ try {
     }
     $Uninstaller = Join-Path $InstallDir 'Uninstall.exe'
     if (-not (Test-Path -LiteralPath $Uninstaller)) { throw 'Uninstaller missing' }
-    & $Uninstaller '/S'
-    if ($LASTEXITCODE -ne 0) { throw "NSIS uninstall failed: $LASTEXITCODE" }
+    $removed = Start-Process -FilePath $Uninstaller -ArgumentList '/S' -Wait -PassThru
+    if ($removed.ExitCode -ne 0) { throw "NSIS uninstall failed: $($removed.ExitCode)" }
     if (Test-Path (Join-Path $InstallDir 'DeiLaw.exe')) { throw 'Application EXE not removed' }
     if (Test-Path (Join-Path $InstallDir 'THIRD_PARTY_LICENSES')) { throw 'Third-party license folder not removed' }
     if (-not (Test-Path -LiteralPath $Sentinel)) { throw 'Uninstall deleted user data' }
