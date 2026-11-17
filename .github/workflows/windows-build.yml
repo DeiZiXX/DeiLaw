@@ -30,6 +30,9 @@ jobs:
       - name: Tests and unsigned Windows setup
         shell: pwsh
         run: .\scripts\build_signpath_candidate.ps1
+      - name: Smoke-test NSIS install and uninstall (isolated runner sandbox)
+        shell: pwsh
+        run: .\scripts\test_nsis_install.ps1 -Installer .\release\DeiLaw_Setup_v0.3.1.exe
       - name: Upload candidate, never public release
         uses: actions/upload-artifact@v4
         with:
