@@ -3,6 +3,15 @@
 name: DeiLaw SignPath approved release
 on:
   workflow_dispatch:
+    inputs:
+      reviewed_commit_sha:
+        description: 'Full commit SHA reviewed for source rights, bundled dependencies, and privacy'
+        required: true
+        type: string
+      rights_and_licenses_checked:
+        description: 'I completed the human code/media/Qt/third-party rights review for this commit'
+        required: true
+        type: boolean
 permissions:
   actions: read
   contents: read
@@ -28,9 +37,13 @@ jobs:
           SIGNPATH_CONFIG_APP: ${{ vars.SIGNPATH_CONFIG_APP }}
           SIGNPATH_CONFIG_SETUP: ${{ vars.SIGNPATH_CONFIG_SETUP }}
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_REVIEWED_SHA: ${{ inputs.reviewed_commit_sha }}
+          SIGNPATH_RIGHTS_ACK: ${{ inputs.rights_and_licenses_checked }}
         run: |
           $license = Get-Content LICENSE -Raw
           if ($license -notmatch 'GNU GENERAL PUBLIC LICENSE') { throw 'GPL-3.0 not yet applied: refusing signature' }
+          if ($env:SIGNPATH_RIGHTS_ACK -ne 'true') { throw 'Per-release rights and dependency review not acknowledged' }
+          if ($env:SIGNPATH_REVIEWED_SHA -cne $env:GITHUB_SHA) { throw 'Reviewed commit SHA does not match the build source' }
           foreach($key in @('SIGNPATH_ORGANIZATION_ID','SIGNPATH_PROJECT_SLUG','SIGNPATH_SIGNING_POLICY','SIGNPATH_CONFIG_APP','SIGNPATH_CONFIG_SETUP','SIGNPATH_API_TOKEN')) {
             if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($key))) { throw "$key is not configured" }
           }
@@ -43,6 +56,11 @@ jobs:
       - name: Build unsigned application
         shell: pwsh
         run: .\build_app_only.ps1
+      - name: Audit actual Windows bundle notices (technical integrity only)
+        shell: pwsh
+        run: |
+          python scripts/review_windows_bundle.py dist/DeiLaw release/license_evidence.json
+          if ($LASTEXITCODE -ne 0) { throw 'Windows license evidence integrity failed' }
       - name: Upload unsigned app EXE for verified signing
         id: unsigned-app
         uses: actions/upload-artifact@v4
@@ -107,5 +125,7 @@ jobs:
           path: |
             release/DeiLaw_Setup_v0.3.1.exe
             release/build_inventory.json
+            release/license_evidence.json
+            dist/DeiLaw/THIRD_PARTY_LICENSES/license_manifest.json
           if-no-files-found: error
           retention-days: 30
