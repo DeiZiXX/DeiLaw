@@ -78,7 +78,7 @@
 
 - [x] На основе реального unsigned CI [run #44155840585](https://github.com/DeiZiXX/DeiLaw/actions/runs/44155840585): 109 тестов, 282 файла, 61 upstream notice, 105 native файлов; это **не** верификация всех лицензий.
 - [x] Ветка PR генерирует `release/component_review.json`: классификация Qt/CPython/OpenSSL/Microsoft Runtime/прочих native компонентов без утверждения о правах на них.
-- [ ] Новый CI должен пройти silent NSIS install/reinstall/uninstall с тестом сохранения `data/` и privacy-default, затем нужны интерактивные Windows/сетевые проверки.
+- [x] Windows CI [run #44158776436](https://github.com/DeiZiXX/DeiLaw/actions/runs/44158776436) прошёл 112 unit-тестов и silent NSIS install/reinstall/uninstall с сохранением `data/` и default-deny privacy. Интерактивные Windows/сетевые проверки по-прежнему нужны.
 - [ ] Снять ограничения по внешним компонентам: Qt LGPL (заменяемость DLL, upstream sources/notices), MSVC/UCRT (точная квалификация под `System Libraries`), OpenSSL/CPython и другие компоненты.
 - [ ] Владелец проверил права на код/соавторов и медиа, утвердил выпуск matching GPL-исходников и названия релиза.
 - [ ] Не объединять PR, пока открыт хотя бы один юридический или обязательный UX блокер.
