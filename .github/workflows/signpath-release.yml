@@ -126,6 +126,7 @@ jobs:
             release/DeiLaw_Setup_v0.3.1.exe
             release/build_inventory.json
             release/license_evidence.json
+            release/component_review.json
             dist/DeiLaw/THIRD_PARTY_LICENSES/license_manifest.json
           if-no-files-found: error
           retention-days: 30
