@@ -64,3 +64,12 @@
 [GitHub Actions run 44153689429](https://github.com/DeiZiXX/DeiLaw/actions/runs/44153689429) **завершился успешно**. Подтверждено: `104` теста OK, `DeiLaw.exe` и NSIS installer собраны, новый `build_inventory.json` учитывает **272 файла** и прежние **22 пакета сборочного окружения**. Из них **52 файла** находятся в `THIRD_PARTY_LICENSES/`, включая `license_manifest.json`. Скрипт вывел «Priority packages without upstream license file: none». Сборка доступна только как **неподписанный тестовый artifact**.
 
 Это подтверждает наличие license-файлов установленных wheel-пакетов, а не юридическую проверку каждого Qt DLL и OpenSSL/Windows runtime и не выполнение LGPL с правом замены библиотек. Исходный исторический аудит 220-файлового комплекта выше сохранён для сравнения.
+
+
+## Этап 3 — точный native-file каталог (18.11.2026)
+
+Содержимое [успешного Windows артефакта #44155840585](https://github.com/DeiZiXX/DeiLaw/actions/runs/44155840585) изучено непосредственно по `build_inventory.json` и `license_evidence.json`: **105** native EXE/DLL/PYD. Добавлен автоматический `scripts/classify_native_components.py`, выпускающий `release/component_review.json`: Qt/PyQt 24, Microsoft MSVC/UCRT/API-set 50, OpenSSL 2, CPython 21, прочие native 7, DeiLaw EXE 1.
+
+Числа относятся к указанному старому кандидатному артефакту: новая сборка может отличаться. Все группы **требуют ручного лицензионного решения**. По [условиям SignPath](https://signpath.org/terms) допускается исключение для определённых `System Libraries` (термин GPLv3); нельзя автоматически объявлять все MSVC DLL разрешёнными или запрещёнными. Релиз блокируется до разбора происхождения и соответствующей правовой основы.
+
+Подробная таблица и протокол для владельца: [PHASE3_RELEASE_GATE.md](PHASE3_RELEASE_GATE.md).
