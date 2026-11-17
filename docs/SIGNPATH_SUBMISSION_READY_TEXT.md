@@ -58,3 +58,7 @@ DeiLaw is an independently maintained Windows desktop companion for role-play pl
 - На дату проверки репозиторный GitHub API `/repos/DeiZiXX/DeiLaw/rulesets` вернул **пустой список**. Это значит, что правил GitHub *rulesets* не найдено. Состояние классической branch protection через подключение проверить не получилось (HTTP 403); нельзя делать вывод, что защиты ветки вообще нет.
 - [Актуальные условия SignPath Foundation](https://signpath.org/terms): уже опубликованное в том же виде OSS-приложение, открытая OSI-лицензия без коммерческого двойного лицензирования, роли подписи, MFA и ручное утверждение каждого релиза. PyQt6 имеет коммерческую/ GPL двойную модель у правообладателя ([Riverbank](https://www.riverbankcomputing.com/software/)), поэтому перед формальной заявкой необходимо согласовать именно используемый GPL wheel.
 - Официальная заявка **не отправлялась**, доступ владельца к форме и SignPath Foundation credentials не предоставлен.
+
+## Инструмент публикации GPL-кандидата
+
+Новый [`.github/workflows/gpl-release-draft.yml`](../.github/workflows/gpl-release-draft.yml) готовит **только закрытый черновик GitHub Release** после подтверждения прав/лицензий и совпадения полного SHA `main`. Не создаёт SignPath заявку, не выдаёт цифровую подпись и не публикует автоматически. Для официальной публикации требуются реальный аудит и действие владельца в GitHub.
