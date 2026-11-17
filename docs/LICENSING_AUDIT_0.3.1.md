@@ -70,3 +70,8 @@ Discord, Supabase, OpenAI, GitHub и форум RMRP — удалённые се
 Inno Setup, UX выбора приватности, выполнение SignPath action. Повторно подтвердить
 соответствие NSIS/zlib требованиям SignPath необходимо на реальном релизном артефакте.
 Полный список: [SIGNPATH_FINAL_GATE.md](SIGNPATH_FINAL_GATE.md).
+
+
+## Изменение GPL в подготовительной ветке — 18.11.2026
+
+Владелец согласовал проведение второго этапа, и GPL-3.0-only опубликована как `LICENSE` **только в PR-ветке**. Это не доказательство авторства третьих лиц и не означает смену `LICENSE` в `main`. Новые `LICENSE_SCOPE.md`, `THIRD_PARTY_NOTICES.md`, `scripts/collect_runtime_licenses.py` и [аудит бандла](THIRD_PARTY_COMPLIANCE_0.3.1.md) исключают автоматическое объявление чужих Qt DLL или текстов RMRP лицензированными DeiLaw. Отчёт по отсутствующим upstream-license файлам нужно проверить по следующей реальной Windows CI-сборке.

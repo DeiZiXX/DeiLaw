@@ -32,3 +32,11 @@ Upstream sources:
 release. Supply the required actual license texts from package metadata and Qt
 components after the Windows build. Never assert that audit is complete when
 any component license/provenance is unknown.
+
+## Реальная Windows-сборка и тексты лицензий
+
+Проверена [сборка 0.3.1 от 18.11.2026](docs/THIRD_PARTY_COMPLIANCE_0.3.1.md): 220 файлов, список 22 пакетов установленной среды, включая build-only инструменты. В исходном тестовом EXE были сохранены только тексты лицензий `cryptography`, что **не обеспечивало** полный набор уведомлений.
+
+Новый сборщик автоматически переносит реально присутствующие `LICENSE`/`COPYING`/`NOTICE` из колес Python в `dist/DeiLaw/THIRD_PARTY_LICENSES/`. Встроенный `license_manifest.json` содержит точные версии, контрольные суммы и список недостающих файлов. **Не называйте результат готовым юридическим аудитом**: исходные файлы Qt, библиотек OpenSSL, DLL Windows, Python runtime, LGPL instructions и собственная политика знаков RMRP требуют отдельной проверки и, при необходимости, комплектования.
+
+Целевой исходный код DeiLaw: `GPL-3.0-only`; исключения и сторонние материалы описаны в [LICENSE_SCOPE.md](LICENSE_SCOPE.md). Это не отменяет авторских прав и лицензий перечисленных выше сторонних проектов.

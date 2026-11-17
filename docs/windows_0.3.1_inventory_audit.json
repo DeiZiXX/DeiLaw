@@ -1,0 +1,40 @@
+{
+  "source_artifact": "DeiLaw_0.3.1_NSIS_UTF8_FIXED_UNSIGNED.zip",
+  "source_inventory_sha256": "3e48d30949708d5d4108bea647b6358bf2ab89e462846487ea9df0132bc892c5",
+  "files_count": 220,
+  "build_environment_packages_count": 22,
+  "license_notice_files_in_bundle": [
+    "_internal/cryptography-50.0.2.dist-info/licenses/LICENSE",
+    "_internal/cryptography-50.0.2.dist-info/licenses/LICENSE.APACHE",
+    "_internal/cryptography-50.0.2.dist-info/licenses/LICENSE.BSD"
+  ],
+  "qt_binaries": [
+    "_internal/PyQt6/Qt6/bin/MSVCP140.dll",
+    "_internal/PyQt6/Qt6/bin/MSVCP140_1.dll",
+    "_internal/PyQt6/Qt6/bin/MSVCP140_2.dll",
+    "_internal/PyQt6/Qt6/bin/opengl32sw.dll",
+    "_internal/PyQt6/Qt6/bin/Qt6Core.dll",
+    "_internal/PyQt6/Qt6/bin/Qt6Gui.dll",
+    "_internal/PyQt6/Qt6/bin/Qt6Network.dll",
+    "_internal/PyQt6/Qt6/bin/Qt6Svg.dll",
+    "_internal/PyQt6/Qt6/bin/Qt6Widgets.dll",
+    "_internal/PyQt6/Qt6/bin/VCRUNTIME140.dll",
+    "_internal/PyQt6/Qt6/bin/VCRUNTIME140_1.dll",
+    "_internal/PyQt6/Qt6/plugins/generic/qtuiotouchplugin.dll",
+    "_internal/PyQt6/Qt6/plugins/iconengines/qsvgicon.dll",
+    "_internal/PyQt6/Qt6/plugins/imageformats/qgif.dll",
+    "_internal/PyQt6/Qt6/plugins/imageformats/qicns.dll",
+    "_internal/PyQt6/Qt6/plugins/imageformats/qico.dll",
+    "_internal/PyQt6/Qt6/plugins/imageformats/qjpeg.dll",
+    "_internal/PyQt6/Qt6/plugins/imageformats/qsvg.dll",
+    "_internal/PyQt6/Qt6/plugins/imageformats/qtga.dll",
+    "_internal/PyQt6/Qt6/plugins/imageformats/qtiff.dll",
+    "_internal/PyQt6/Qt6/plugins/imageformats/qwbmp.dll",
+    "_internal/PyQt6/Qt6/plugins/imageformats/qwebp.dll",
+    "_internal/PyQt6/Qt6/plugins/platforms/qminimal.dll",
+    "_internal/PyQt6/Qt6/plugins/platforms/qoffscreen.dll",
+    "_internal/PyQt6/Qt6/plugins/platforms/qwindows.dll",
+    "_internal/PyQt6/Qt6/plugins/styles/qmodernwindowsstyle.dll"
+  ],
+  "disclaimer": "Build package metadata is not the list of runtime included packages; complete license compliance still requires review."
+}

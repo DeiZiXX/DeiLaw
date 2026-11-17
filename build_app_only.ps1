@@ -28,4 +28,8 @@ if ($LASTEXITCODE -ne 0) { throw 'PyInstaller build failed.' }
 
 $Exe = Join-Path $PSScriptRoot 'dist\DeiLaw\DeiLaw.exe'
 if (!(Test-Path -LiteralPath $Exe)) { throw 'Missing DeiLaw.exe in dist.' }
+# Bundle actual wheel license and notice files in the onedir distribution.
+$LicenseDir = Join-Path $PSScriptRoot 'dist\DeiLaw\THIRD_PARTY_LICENSES'
+& $Python (Join-Path $PSScriptRoot 'scripts\collect_runtime_licenses.py') $LicenseDir
+if ($LASTEXITCODE -ne 0) { throw 'Unable to collect third-party license notices.' }
 Write-Host "Windows program built: $Exe" -ForegroundColor Green
