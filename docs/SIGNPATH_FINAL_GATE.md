@@ -33,6 +33,9 @@
 - [ ] Установить GitHub secret `SIGNPATH_API_TOKEN`, vars `SIGNPATH_ORGANIZATION_ID`, `SIGNPATH_PROJECT_SLUG`, `SIGNPATH_SIGNING_POLICY`, `SIGNPATH_CONFIG_APP`, `SIGNPATH_CONFIG_SETUP` и защищённую Environment `signpath-production` с reviewer approval.
 - [ ] Добавить *доверенный* offline Ed25519 публичный ключ в `update_trust.py`; закрытый ключ не загружать в GitHub/чат. Signed update manifest создавать отдельно, после SignPath signing setup.
 - [ ] Вручную одобрить каждое подписание и проверить оба артефакта Authenticode перед выпуском.
+- [x] CI подписи требует отдельное подтверждение проверки лицензий для полного SHA выпуска, но сам факт подтверждения **не заменяет** документов по правам и внешней проверки.
+
+Работа второго этапа и оставшиеся действия: [PHASE2_STATUS_20261118.md](PHASE2_STATUS_20261118.md).
 
 ## Точки отказа по умолчанию
 
