@@ -53,3 +53,10 @@
 - [ ] Подтвердить авторские права на весь собственный код, включая вклады возможных соавторов; медиа подтверждены только заявлением владельца.
 
 Источники: [SignPath условия](https://signpath.org/terms), [Riverbank PyQt](https://www.riverbankcomputing.com/software/), [PyQt6-Qt6](https://pypi.org/project/PyQt6-Qt6/6.12.0/), [обязательства Qt](https://www.qt.io/faq/qt-open-source-licensing), [PyInstaller лицензия](https://www.pyinstaller.org/en/stable/license.html), [NSIS license](https://nsis.sourceforge.io/License).
+
+
+## Повторная проверка Windows CI — второй этап GPL (18.11.2026)
+
+[GitHub Actions run 44153689429](https://github.com/DeiZiXX/DeiLaw/actions/runs/44153689429) **завершился успешно**. Подтверждено: `104` теста OK, `DeiLaw.exe` и NSIS installer собраны, новый `build_inventory.json` учитывает **272 файла** и прежние **22 пакета сборочного окружения**. Из них **52 файла** находятся в `THIRD_PARTY_LICENSES/`, включая `license_manifest.json`. Скрипт вывел «Priority packages without upstream license file: none». Сборка доступна только как **неподписанный тестовый artifact**.
+
+Это подтверждает наличие license-файлов установленных wheel-пакетов, а не юридическую проверку каждого Qt DLL и OpenSSL/Windows runtime и не выполнение LGPL с правом замены библиотек. Исходный исторический аудит 220-файлового комплекта выше сохранён для сравнения.
