@@ -45,7 +45,7 @@ class SignedUpdateModeTests(unittest.TestCase):
                 verify_manifest(manifest)
         with patch.object(update_trust,'UPDATE_ED25519_PUBLIC_KEY_B64',base64.b64encode(public).decode('ascii')):
             self.assertTrue(verify_manifest(manifest))
-            for key,val in [('sha256','b'*64),('size',2501),('version','0.3.5rc11')]:
+            for key,val in [('sha256','b'*64),('size',2501),('version','0.3.5rc11'),('mandatory',True),('mandatory','true')]:
                 bad=dict(manifest);bad[key]=val
                 with self.subTest(key=key),self.assertRaises(UntrustedUpdateError):
                     verify_manifest(bad)
