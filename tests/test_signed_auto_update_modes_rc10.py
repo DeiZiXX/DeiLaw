@@ -45,7 +45,7 @@ class SignedUpdateModeTests(unittest.TestCase):
                 verify_manifest(manifest)
         with patch.object(update_trust,'UPDATE_ED25519_PUBLIC_KEY_B64',base64.b64encode(public).decode('ascii')):
             self.assertTrue(verify_manifest(manifest))
-            for key,val in [('sha256','b'*64),('size',2501),('version','0.3.5rc11')]:
+            for key,val in [('sha256','b'*64),('size',2501),('version','0.3.5rc11'),('mandatory',True),('mandatory','true')]:
                 bad=dict(manifest);bad[key]=val
                 with self.subTest(key=key),self.assertRaises(UntrustedUpdateError):
                     verify_manifest(bad)
@@ -64,7 +64,7 @@ class SignedUpdateModeTests(unittest.TestCase):
                 updater.launch_update_helper({'installer_path':'C:/fake/evil.exe','update_info':{}})
             popen.assert_not_called()
         self.assertIn('validate_signed_download(update_info)',Path(updater.__file__).read_text('utf-8'))
-        self.assertIn('unins000.exe',Path(updater.__file__).read_text('utf-8'))
+        self.assertIn('Uninstall.exe',Path(updater.__file__).read_text('utf-8'))
         self.assertIn('create_update_install_helper(installer_path, update_info)',Path(updater.__file__).read_text('utf-8'))
 
     def test_gui_modes_wired_to_startup_poll_and_saved_state(self):
@@ -72,7 +72,7 @@ class SignedUpdateModeTests(unittest.TestCase):
         main=(root/'main.py').read_text('utf-8')
         window=(root/'ui/main_window.py').read_text('utf-8')
         self.assertIn('update_install_mode = _read_startup_update_mode()',main)
-        self.assertIn('start_check=not auth_restart',main)
+        self.assertIn('startup_checks_enabled(',main)
         self.assertIn('action = update_action(self.update_install_mode)',main)
         self.assertIn('action = update_action(self.app_settings.get("update_install_mode"))',window)
         self.assertIn('self.settings_update_install_mode.addItem("Автоматически", "auto")',window)

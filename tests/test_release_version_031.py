@@ -29,8 +29,12 @@ class PublicVersionMetadataTests(unittest.TestCase):
                 self.assertIn('version_info.txt', script)
 
     def test_current_docs(self):
-        self.assertIn('Текущая версия исходников: 0.3.1',
-            (ROOT / 'README.md').read_text(encoding='utf-8'))
+        readme = (ROOT / 'README.md').read_text(encoding='utf-8')
+        self.assertIn('Открытый исходный код: 0.3.1', readme)
+        self.assertIn('GPL-3.0-only', readme)
+        self.assertIn('SOURCE_RELEASE_GUIDE_0.3.1.md', readme)
+        self.assertTrue((ROOT / 'docs/SOURCE_RELEASE_NOTES_0.3.1.md').is_file())
+        self.assertIn('GNU GENERAL PUBLIC LICENSE', (ROOT / 'LICENSE').read_text(encoding='utf-8'))
         self.assertIn('APP_VERSION = "0.3.1"',
             (ROOT / 'docs/VERIFICATION.md').read_text(encoding='utf-8'))
 

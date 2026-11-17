@@ -25,7 +25,7 @@ OFFICIAL_UPDATE_CONFIG = {
     "github_owner": "DeiZiXX",
     "github_repo": "DeiLaw",
     "channel": "stable",
-    "check_on_startup": True,
+    "check_on_startup": False,
 }
 
 
@@ -583,7 +583,7 @@ def create_update_install_helper(installer_path, update_info):
     if os.name != "nt" or not getattr(sys, "frozen", False):
         raise UntrustedUpdateError("Автоустановка доступна только в установленной Windows-версии DeiLaw.")
     app_dir = app_base_dir()
-    if Path(sys.executable).name.lower() != "deilaw.exe" or not (app_dir / "unins000.exe").is_file():
+    if Path(sys.executable).name.lower() != "deilaw.exe" or not any((app_dir / marker).is_file() for marker in ("Uninstall.exe", "unins000.exe")):
         raise UntrustedUpdateError("DeiLaw запущен не из установленной версии. Установите официальный релиз вручную.")
     local_appdata = os.environ.get("LOCALAPPDATA")
     if not local_appdata:
@@ -621,8 +621,8 @@ def launch_update_helper(launch_plan):
     # Recheck metadata, install directory, file identity and file hash just
     # before CreateProcess, not only when the download completed.
     create_update_install_helper(installer_path, update_info)
-    command = [
-        installer_path, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
-        "/CLOSEAPPLICATIONS",
-    ]
+    # Current installer is NSIS (silent flag /S); older Inno Setup packages
+    # are not accepted for new signed releases.  /D= is intentionally omitted
+    # because the NSIS installer uses the known per-user location.
+    command = [installer_path, "/S"]
     subprocess.Popen(command, close_fds=True, shell=False)

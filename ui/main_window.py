@@ -781,7 +781,9 @@ class DeiLawWindow(QMainWindow):
         # startup feel responsive even with a large law database.
         QTimer.singleShot(40, self.load_stats)
         QTimer.singleShot(90, self.load_laws)
-        QTimer.singleShot(160, self.refresh_update_history)
+        # Release history contacts GitHub; fetch only after explicit opt-in/action.
+        if self.app_settings.get("auto_check_program_updates", False):
+            QTimer.singleShot(160, self.refresh_update_history)
         QTimer.singleShot(220, self.refresh_status_page)
 
         # Load/parse the configured charter after the main window is visible.
@@ -802,7 +804,8 @@ class DeiLawWindow(QMainWindow):
         # Developer replies are checked in the background even when DeiLaw is
         # minimized to the system tray. The first successful check only seeds
         # the seen-message cache, so old replies are never announced as new.
-        QTimer.singleShot(7000, self.start_report_reply_monitor)
+        if self.app_settings.get("background_reply_notifications", False):
+            QTimer.singleShot(7000, self.start_report_reply_monitor)
 
         # Law database update is intentionally delayed until the main window,
         # onboarding and normal startup tasks have settled.
@@ -813,7 +816,11 @@ class DeiLawWindow(QMainWindow):
     # =========================================================
 
     def start_report_reply_monitor(self):
-        """Watch developer replies while DeiLaw is running/minimized."""
+        """Watch developer replies only after user has opted in."""
+        if not self.app_settings.get("background_reply_notifications", False):
+            if self.community_reply_monitor_timer is not None:
+                self.community_reply_monitor_timer.stop()
+            return
         if self.safe_mode:
             return
 
@@ -1025,21 +1032,22 @@ class DeiLawWindow(QMainWindow):
 
     def update_program_update_monitor_state(self):
         """Keep checking for signed releases; installation mode is configurable."""
-        self.app_settings["auto_check_program_updates"] = True
-
+        enabled = bool(self.app_settings.get("auto_check_program_updates", False))
         if hasattr(self, "settings_auto_program_updates"):
             self.settings_auto_program_updates.blockSignals(True)
-            self.settings_auto_program_updates.setChecked(True)
-            self.settings_auto_program_updates.setEnabled(False)
+            self.settings_auto_program_updates.setChecked(enabled)
+            self.settings_auto_program_updates.setEnabled(True)
             self.settings_auto_program_updates.blockSignals(False)
-
         if self.program_update_poll_timer is None:
             return
-
-        if not self.program_update_poll_timer.isActive():
+        if enabled and not self.program_update_poll_timer.isActive():
             self.program_update_poll_timer.start()
+        elif not enabled and self.program_update_poll_timer.isActive():
+            self.program_update_poll_timer.stop()
 
     def auto_check_program_update(self):
+        if not bool(self.app_settings.get("auto_check_program_updates", False)):
+            return
         config = load_update_config(
             self.app_settings.get("update_channel", "stable")
         )
@@ -3881,11 +3889,12 @@ class DeiLawWindow(QMainWindow):
             "double_click_opens_article": True,
             "ui_sounds": True,
             "report_reply_voice": True,
+            "background_reply_notifications": False,
             "report_reply_seen_ids": [],
             "onboarding_completed": False,
             "initial_database_notice_dismissed": False,
-            "auto_check_program_updates": True,
-            "auto_update_laws_on_startup": True,
+            "auto_check_program_updates": False,
+            "auto_update_laws_on_startup": False,
             "law_update_interval_hours": 6,
             "last_auto_law_update_at": 0,
             "update_channel": load_update_config().get("channel", "stable"),
@@ -4593,7 +4602,7 @@ class DeiLawWindow(QMainWindow):
             "Автоматически обновлять законку при запуске"
         )
         self.settings_auto_law_updates.setChecked(
-            bool(self.app_settings.get("auto_update_laws_on_startup", True))
+            bool(self.app_settings.get("auto_update_laws_on_startup", False))
         )
         self.settings_auto_law_updates.setToolTip(
             "DeiLaw запускает обычную синхронизацию законки после старта, "
@@ -4634,15 +4643,27 @@ class DeiLawWindow(QMainWindow):
         self.settings_auto_program_updates = StatusCheckBox(
             "Автоматически проверять наличие обновлений"
         )
-        self.settings_auto_program_updates.setChecked(True)
-        self.settings_auto_program_updates.setEnabled(False)
+        self.settings_auto_program_updates.setChecked(
+            bool(self.app_settings.get("auto_check_program_updates", False))
+        )
         self.settings_auto_program_updates.setToolTip(
-            "Проверка выполняется перед каждым запуском и каждые 3 минуты "
-            "во время работы DeiLaw."
+            "После включения DeiLaw связывается с GitHub при запуске "
+            "и во время работы. Отключается здесь в любой момент."
         )
         update_program_layout.addWidget(
             self.settings_auto_program_updates
         )
+        self.settings_background_reply_notifications = StatusCheckBox(
+            "Фоновая проверка ответов разработчика (Supabase)"
+        )
+        self.settings_background_reply_notifications.setChecked(
+            bool(self.app_settings.get("background_reply_notifications", False))
+        )
+        self.settings_background_reply_notifications.setToolTip(
+            "Включите, чтобы DeiLaw регулярно запрашивал новые ответы. "
+            "Без согласия фоновые запросы не выполняются."
+        )
+        update_program_layout.addWidget(self.settings_background_reply_notifications)
 
         channel_row = QHBoxLayout()
         channel_row.addWidget(QLabel("Канал обновлений"))
@@ -4897,6 +4918,7 @@ class DeiLawWindow(QMainWindow):
             self.settings_overlay_height,
             self.settings_search_limit,
             self.settings_auto_program_updates,
+            self.settings_background_reply_notifications,
             self.settings_auto_law_updates,
             self.settings_law_update_interval,
             self.settings_update_channel,
@@ -4958,7 +4980,8 @@ class DeiLawWindow(QMainWindow):
             "remember_close_choice": (
                 self.settings_remember_close_choice.isChecked()
             ),
-            "auto_check_program_updates": True,
+            "auto_check_program_updates": self.settings_auto_program_updates.isChecked(),
+            "background_reply_notifications": self.settings_background_reply_notifications.isChecked(),
             "auto_update_laws_on_startup": self.settings_auto_law_updates.isChecked(),
             "law_update_interval_hours": int(
                 self.settings_law_update_interval.currentData() or 6
@@ -5671,7 +5694,8 @@ class DeiLawWindow(QMainWindow):
             "double_click_opens_article": self.settings_double_open.isChecked(),
             "ui_sounds": self.settings_ui_sounds.isChecked(),
             "report_reply_voice": self.settings_report_reply_voice.isChecked(),
-            "auto_check_program_updates": True,
+            "auto_check_program_updates": self.settings_auto_program_updates.isChecked(),
+            "background_reply_notifications": self.settings_background_reply_notifications.isChecked(),
             "auto_update_laws_on_startup": self.settings_auto_law_updates.isChecked(),
             "law_update_interval_hours": int(self.settings_law_update_interval.currentData() or 6),
             "update_channel": (
@@ -5702,6 +5726,7 @@ class DeiLawWindow(QMainWindow):
         self.apply_style()
         self.install_memo_shortcut()
         self.update_program_update_monitor_state()
+        self.start_report_reply_monitor()
         self.refresh_memo_board()
         self.apply_overlay_window_settings()
 
@@ -5764,10 +5789,11 @@ class DeiLawWindow(QMainWindow):
         self.settings_double_open.setChecked(True)
         self.settings_ui_sounds.setChecked(True)
         self.settings_report_reply_voice.setChecked(True)
-        self.settings_auto_program_updates.setChecked(True)
+        self.settings_auto_program_updates.setChecked(False)
+        self.settings_background_reply_notifications.setChecked(False)
         mode_index = self.settings_update_install_mode.findData("confirm")
         self.settings_update_install_mode.setCurrentIndex(max(0, mode_index))
-        self.settings_auto_law_updates.setChecked(True)
+        self.settings_auto_law_updates.setChecked(False)
         law_default_index = self.settings_law_update_interval.findData(6)
         self.settings_law_update_interval.setCurrentIndex(max(0, law_default_index))
         default_channel = load_update_config().get("channel", "stable")
@@ -14986,16 +15012,14 @@ class DeiLawWindow(QMainWindow):
         self.program_history_status.setWordWrap(True)
         layout.addWidget(self.program_history_status)
 
-        QTimer.singleShot(
-            900,
-            self.refresh_update_history,
-        )
+        # Do not contact GitHub merely because the History tab is displayed.
+        # The refresh button allows a user-initiated request.
         return page
 
     def maybe_auto_update_laws_at_startup(self):
         if self.safe_mode:
             return
-        if not bool(self.app_settings.get("auto_update_laws_on_startup", True)):
+        if not bool(self.app_settings.get("auto_update_laws_on_startup", False)):
             return
         # First-time users keep the normal onboarding/database setup flow.
         if not bool(self.app_settings.get("onboarding_completed", False)):

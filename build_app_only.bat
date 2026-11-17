@@ -69,6 +69,10 @@ if not exist "dist\DeiLaw\DeiLaw.exe" (
     echo ERROR: The expected output executable was not created.
     goto failed
 )
+echo Collecting third-party license notices...
+"%PYTHON_EXE%" %PYTHON_SWITCH% scripts\collect_runtime_licenses.py dist\DeiLaw\THIRD_PARTY_LICENSES
+if errorlevel 1 goto failed
+
 echo.
 echo SUCCESS: dist\DeiLaw\DeiLaw.exe
 echo This is an UNSIGNED development build, not a public release.

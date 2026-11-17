@@ -45,7 +45,14 @@ class TestReleaseGate(unittest.TestCase):
     with self.assertRaisesRegex(ValueError,'exact 40- or 64'):
      prerequisites(env,'not-a-key',pathlib.Path(d))
  def test_private_keys_not_bundled(self):
-  bad=[x for x in ROOT.rglob('*') if x.is_file() and x.suffix.lower() in ('.pfx','.p12','.pem','.key')]
+  # Do not inspect an isolated .venv: certifi CA bundles (cacert.pem) are
+  # public upstream certificates, not credentials shipped by DeiLaw.
+  bad=[]
+  ignored={'.git','.venv','venv','build','dist','__pycache__'}
+  for folder,dirs,files in os.walk(ROOT):
+   dirs[:]=[d for d in dirs if d not in ignored]
+   bad.extend(pathlib.Path(folder)/name for name in files
+              if pathlib.Path(name).suffix.lower() in ('.pfx','.p12','.pem','.key'))
   self.assertFalse(bad,'Signing keys or certificates must never be included: '+str(bad))
 
 if __name__=='__main__': unittest.main()
