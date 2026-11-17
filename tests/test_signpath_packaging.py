@@ -23,6 +23,7 @@ class PackagingChecks(unittest.TestCase):
         build = (ROOT / 'scripts/build_signpath_candidate.ps1').read_text(encoding='utf-8')
         installer = (ROOT / 'installer/DeiLaw.nsi').read_text(encoding='utf-8')
         self.assertIn('"/INPUTCHARSET" "UTF8"', build)
+        self.assertIn('scripts\\review_windows_bundle.py', build)
         self.assertIn('Unicode true', installer)
         self.assertIn('Обнаружена прежняя версия DeiLaw', installer)
         self.assertIn('IfFileExists "$INSTDIR\\unins000.exe"', installer)
@@ -35,6 +36,9 @@ class PackagingChecks(unittest.TestCase):
                        'GNU GENERAL PUBLIC LICENSE', 'github-artifact-id:',
                        'output-artifact-directory:', 'manual release approval'):
             self.assertIn(needle, s)
+        self.assertIn('SIGNPATH_REVIEWED_SHA -cne $env:GITHUB_SHA', s)
+        self.assertIn('SIGNPATH_RIGHTS_ACK', s)
+        self.assertIn('scripts/review_windows_bundle.py', s)
 
     def test_inventory_sha256_and_no_file_write(self):
         with tempfile.TemporaryDirectory() as tmp:
