@@ -33,7 +33,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Windows trust verification failed for DeiLaw.e
 $AppSignature = Get-AuthenticodeSignature -LiteralPath $AppExe
 if ($AppSignature.Status -ne 'Valid') { throw 'DeiLaw.exe has no valid Authenticode signature.' }
 
-& $NsisCompiler "/DAPP_VERSION=$Version" "/DDEILAW_SOURCE=$PSScriptRoot\dist\DeiLaw" "/DDEILAW_OUTPUT=$PSScriptRoot\release" 'installer\DeiLaw.nsi'
+& $NsisCompiler "/INPUTCHARSET" "UTF8" "/V2" "/DAPP_VERSION=$Version" "/DDEILAW_SOURCE=$PSScriptRoot\dist\DeiLaw" "/DDEILAW_OUTPUT=$PSScriptRoot\release" 'installer\DeiLaw.nsi'
 if ($LASTEXITCODE -ne 0) { throw 'NSIS compilation failed.' }
 $Installer = Join-Path $PSScriptRoot "release\DeiLaw_Setup_v$Version.exe"
 if (!(Test-Path -LiteralPath $Installer)) { throw 'Release installer missing.' }
