@@ -1,0 +1,93 @@
+# Manual release only; never publish an unsigned executable automatically.
+# Draft requires owner confirmation of exact commit and third-party obligations.
+name: DeiLaw GPL-3.0 Windows draft release (unsigned)
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed_commit_sha:
+        description: "Full 40-char SHA reviewed for ownership, Qt/LGPL, binary licenses and privacy"
+        required: true
+        type: string
+      rights_and_licenses_checked:
+        description: "I checked code/media rights and ALL bundled native library obligations for this exact SHA"
+        required: true
+        type: boolean
+permissions:
+  contents: write
+  actions: read
+jobs:
+  draft-gpl-release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-2022
+    environment: gpl-release
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Check reviewed commit, rights approval and GPL license
+        shell: pwsh
+        env:
+          REVIEWED_SHA: ${{ inputs.reviewed_commit_sha }}
+          RIGHTS_CHECKED: ${{ inputs.rights_and_licenses_checked }}
+        run: |
+          if ($env:RIGHTS_CHECKED -ne 'true') { throw 'Human rights and third-party license review is not confirmed' }
+          if ($env:REVIEWED_SHA -cne $env:GITHUB_SHA) { throw 'Reviewed SHA does not match the build source' }
+          if ($env:REVIEWED_SHA -notmatch '^[a-f0-9]{40}$') { throw 'Invalid reviewed commit SHA' }
+          $license = Get-Content LICENSE -Raw
+          if ($license -notmatch 'GNU GENERAL PUBLIC LICENSE' -or $license -notmatch 'Version 3, 29 June 2007') {
+            throw 'GPL-3.0 not merged into main; refusing release'
+          }
+          $version = (& python -c 'from app_version import APP_VERSION; print(APP_VERSION)').Trim()
+          if ($version -cne '0.3.1') { throw "Unexpected version: $version" }
+          if (-not (Test-Path docs/RELEASE_DRAFT_0.3.1.md)) { throw 'Release notes are missing' }
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          choco install nsis --no-progress -y
+          $nsis = 'C:\Program Files (x86)\NSIS'
+          if (!(Test-Path "$nsis\makensis.exe")) { throw 'NSIS compiler missing' }
+          "$nsis" | Out-File -FilePath $env:GITHUB_PATH -Append
+      - name: Create isolated Python environment
+        shell: pwsh
+        run: python -m venv .venv
+      - name: Build unsigned candidate and create exact source snapshot
+        shell: pwsh
+        run: .\scripts\build_signpath_candidate.ps1
+      - name: Verify NSIS install, reinstall and uninstall
+        shell: pwsh
+        run: .\scripts\test_nsis_install.ps1 -Installer .\release\DeiLaw_Setup_v0.3.1.exe
+      - name: Verify source provenance matches installer and commit
+        shell: pwsh
+        run: |
+          $p = Get-Content release/source_provenance.json -Raw | ConvertFrom-Json
+          if ($p.source_commit -cne $env:GITHUB_SHA) { throw 'Source archive does not match GitHub SHA' }
+          if ($p.version -cne '0.3.1') { throw 'Source archive version mismatch' }
+          $digest = (Get-FileHash 'release/DeiLaw_Setup_v0.3.1.exe' -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($p.unsigned_installer_sha256 -cne $digest) { throw 'Installer does not match source provenance' }
+          $sourceDigest = (Get-FileHash 'release/DeiLaw_Source_v0.3.1.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($p.source_archive_sha256 -cne $sourceDigest) { throw 'Source archive digest mismatch' }
+      - name: Create DRAFT GitHub release only, never publish directly
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          & gh release view v0.3.1 --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) { throw 'Release v0.3.1 already exists; refusing overwrite' }
+          $assets = @(
+            'release/DeiLaw_Setup_v0.3.1.exe',
+            'release/DeiLaw_Source_v0.3.1.zip',
+            'release/source_provenance.json',
+            'release/license_evidence.json',
+            'release/component_review.json',
+            'release/build_inventory.json'
+          )
+          foreach ($asset in $assets) {
+            if (-not (Test-Path -LiteralPath $asset)) { throw "Missing release asset: $asset" }
+          }
+          & gh release create 'v0.3.1' --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --draft --title 'DeiLaw v0.3.1 — GPL-3.0 (UNSIGNED DRAFT)' --notes-file 'docs/RELEASE_DRAFT_0.3.1.md' @assets
+          if ($LASTEXITCODE -ne 0) { throw 'Draft GitHub release creation failed' }
+          Write-Host 'DRAFT created, NOT PUBLISHED. Inspect all files and edit notes before publication.'
