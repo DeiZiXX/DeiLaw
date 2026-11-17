@@ -11,8 +11,9 @@
 ## Roles / Роли
 
 - Maintainer / author and reviewer: [@DeiZiXX](https://github.com/DeiZiXX),
-  при условии подтверждения владения и MFA. Вклады других авторов — только через
-  PR с ревью. Для участия независимых ревьюеров их необходимо назначить в GitHub.
+  при условии подтверждения владения и MFA. Ownership заявлен в `.github/CODEOWNERS`,
+  но реальная защита ветки, required reviewers и MFA ещё должны быть включены
+  владельцем в настройках GitHub. Вклады других авторов — только через PR с ревью. Для участия независимых ревьюеров их необходимо назначить в GitHub.
 - SignPath release approver: **не назначен**. Владелец должен назначить роль в
   SignPath после одобрения и требовать ручного одобрения каждого запроса.
 - Signing submitter: GitHub Actions, только с проверенным origin verification,
