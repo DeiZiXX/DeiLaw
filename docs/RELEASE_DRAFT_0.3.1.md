@@ -56,3 +56,11 @@ DeiLaw — независимый Windows-помощник для пользов
 [DeiLaw v0.3.0](https://github.com/DeiZiXX/DeiLaw/releases/tag/v0.3.0) опубликован **03.10.2026** (проверено по GitHub Releases API). Он не содержит будущую GPL-3.0-only лицензию нового кандидата по умолчанию, так как `main` всё ещё под `All rights reserved`; не объявлять прошлый релиз GPL задним числом.
 
 GitHub rulesets API на момент проверки вернул `[]`. Состояние классической branch protection через текущую интеграцию недоступно (403), поэтому для SignPath нужно вручную подтвердить/создать действующие required PR review и anti-force-push rulesets.
+
+## Автоматизированный выпуск — только как черновик
+
+В PR подготовлен [manual GPL draft release workflow](../.github/workflows/gpl-release-draft.yml). **После** подтверждения прав, третьих библиотек, интерактивной Windows-проверки и слияния проверенного PR в `main` владелец может открыть GitHub Actions и вручную запустить этот workflow из `main`.
+
+Workflow блокирует запуск без `rights_and_licenses_checked=true` и полного SHA `reviewed_commit_sha`, равного собираемому коммиту. Запускает сборку и установочные тесты, сверяет SHA-256 установщика и source archive, затем создаёт только **DRAFT GitHub Release** с неподписанными артефактами. Автоматически открыто не публикует.
+
+Настройка защищённой GitHub environment `gpl-release` с доверенными reviewer обязательна перед ручным запуском. Только после ручной проверки опубликованного OSS-релиза возможна отдельная [SignPath Foundation application](https://signpath.org/apply.html).
