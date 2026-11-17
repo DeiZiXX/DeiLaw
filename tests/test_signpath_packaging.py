@@ -19,6 +19,16 @@ class PackagingChecks(unittest.TestCase):
         self.assertNotIn('RMDir /r "$INSTDIR"',s)
         self.assertIn('"/S"', (ROOT/'updater.py').read_text(encoding='utf-8'))
 
+    def test_nsis_utf8_cyrillic_and_legacy_inno_guard(self):
+        build = (ROOT / 'scripts/build_signpath_candidate.ps1').read_text(encoding='utf-8')
+        installer = (ROOT / 'installer/DeiLaw.nsi').read_text(encoding='utf-8')
+        self.assertIn('"/INPUTCHARSET" "UTF8"', build)
+        self.assertIn('Unicode true', installer)
+        self.assertIn('Обнаружена прежняя версия DeiLaw', installer)
+        self.assertIn('IfFileExists "$INSTDIR\\unins000.exe"', installer)
+        self.assertIn('Abort', installer)
+        self.assertNotIn('ExecWait \'"$INSTDIR\\unins000.exe"', installer)
+
     def test_signpath_pipeline_fail_closed(self):
         s = (ROOT / '.github/workflows/signpath-release.yml').read_text(encoding='utf-8')
         for needle in ('SIGNPATH_API_TOKEN', 'if: github.ref ==',
