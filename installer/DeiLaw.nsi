@@ -32,16 +32,37 @@ VIAddVersionKey /LANG=1033 "CompanyName" "DeiZi"
 
 !define MUI_ICON "${__FILEDIR__}\assets\deilaw_installer.ico"
 !define MUI_UNICON "${__FILEDIR__}\assets\deilaw_installer.ico"
+
+; Original branded wizard art: PNG -> BMP in build_windows_candidate.py.
+!ifndef DEILAW_WELCOME_BMP
+  !error "DeiLaw branded welcome bitmap is required"
+!endif
+!ifndef DEILAW_HEADER_BMP
+  !error "DeiLaw branded header bitmap is required"
+!endif
+!define MUI_WELCOMEFINISHPAGE_BITMAP "${DEILAW_WELCOME_BMP}"
+!define MUI_HEADERIMAGE
+!define MUI_HEADERIMAGE_RIGHT
+!define MUI_HEADERIMAGE_BITMAP "${DEILAW_HEADER_BMP}"
+!define MUI_WELCOMEPAGE_TITLE "Добро пожаловать в DeiLaw"
+!define MUI_WELCOMEPAGE_TEXT "Поиск законодательства, памятка и RP-помощник в одном приложении."
+!define MUI_FINISHPAGE_TITLE "DeiLaw установлен"
 !define MUI_ABORTWARNING
 !define MUI_FINISHPAGE_RUN "$INSTDIR\DeiLaw.exe"
+!define MUI_PAGE_CUSTOMFUNCTION_SHOW PlayInstallerWelcome
 !insertmacro MUI_PAGE_WELCOME
+!undef MUI_PAGE_CUSTOMFUNCTION_SHOW
 !insertmacro MUI_PAGE_LICENSE "${__FILEDIR__}\..\LICENSE"
 ; SignPath requires displaying privacy policy during installation.
 !insertmacro MUI_PAGE_LICENSE "${__FILEDIR__}\PRIVACY_INSTALL.txt"
 Page custom PrivacyPageCreate PrivacyPageLeave
+!define MUI_PAGE_CUSTOMFUNCTION_SHOW PlayInstallerPage
 !insertmacro MUI_PAGE_DIRECTORY
+!undef MUI_PAGE_CUSTOMFUNCTION_SHOW
 !insertmacro MUI_PAGE_INSTFILES
+!define MUI_PAGE_CUSTOMFUNCTION_SHOW PlayInstallerFinish
 !insertmacro MUI_PAGE_FINISH
+!undef MUI_PAGE_CUSTOMFUNCTION_SHOW
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "Russian"
@@ -54,6 +75,25 @@ Var CheckReplies
 Var OptUpdates
 Var OptLaws
 Var OptReplies
+
+; Three short, bundled DeiLaw cues played via the NSIS built-in System plugin.
+Function PlayInstallerWelcome
+  InitPluginsDir
+  File /oname=$PLUGINSDIR\installer_start.wav "${__FILEDIR__}\assets\sounds\installer_start.wav"
+  System::Call 'winmm::PlaySoundW(w "$PLUGINSDIR\installer_start.wav", p 0, i 131073) i .r0'
+FunctionEnd
+
+Function PlayInstallerPage
+  InitPluginsDir
+  File /oname=$PLUGINSDIR\installer_page.wav "${__FILEDIR__}\assets\sounds\installer_page.wav"
+  System::Call 'winmm::PlaySoundW(w "$PLUGINSDIR\installer_page.wav", p 0, i 131073) i .r0'
+FunctionEnd
+
+Function PlayInstallerFinish
+  InitPluginsDir
+  File /oname=$PLUGINSDIR\installer_finish.wav "${__FILEDIR__}\assets\sounds\installer_finish.wav"
+  System::Call 'winmm::PlaySoundW(w "$PLUGINSDIR\installer_finish.wav", p 0, i 131073) i .r0'
+FunctionEnd
 
 Function .onInit
   ; Default-deny: no background network traffic without user choice.
