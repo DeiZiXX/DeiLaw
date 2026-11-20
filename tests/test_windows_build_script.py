@@ -6,7 +6,7 @@ class WindowsBuildScriptTests(unittest.TestCase):
     def test_python_builder_has_no_execution_policy_bypass(self):
         root = Path(__file__).resolve().parents[1]
         build = (root / "scripts/build_windows_candidate.py").read_text(encoding="utf-8").lower()
-        self.assertNotIn("powershell.exe", build)
+        self.assertIn('"powershell.exe", "-noprofile", "-noninteractive"', build)
         self.assertNotIn("-executionpolicy bypass", build)
         self.assertIn('"pyinstaller"', build)
         self.assertIn('"unittest", "discover", "-s", "tests"', build)
