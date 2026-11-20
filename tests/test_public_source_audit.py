@@ -17,6 +17,12 @@ class PublicSourceAuditTests(unittest.TestCase):
             )
             self.assertEqual(violations(root, ["client.py"]), [])
 
+    def test_blocks_batch_scripts(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "start.bat").write_text("@echo off", encoding="utf-8")
+            self.assertTrue(any("batch script forbidden" in issue for issue in violations(root, ["start.bat"])))
+
     def test_blocks_internal_operations_document(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
