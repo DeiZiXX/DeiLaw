@@ -39,7 +39,7 @@
 ## Точки отказа по умолчанию
 
 `signpath-release.yml` **не запускает подпись** без применённой GPL,
-настроенных secrets/vars и SignPath-проекта. `build_signpath_candidate.ps1`
+настроенных secrets/vars и SignPath-проекта. `scripts/build_windows_candidate.py`
 производит только **неподписанный** setup, пригодный для испытания.
 
 ## Переход со старого Inno Setup
