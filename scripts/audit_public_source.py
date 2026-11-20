@@ -72,6 +72,8 @@ def violations(root: Path, names: list[str]) -> list[str]:
         low = name.lower()
         if name in NONPUBLIC_PATHS:
             problems.append(f"{name}: internal operations file in public release")
+        if path.suffix.lower() == ".bat":
+            problems.append(f"{name}: batch script forbidden in public release")
         if (path.name.startswith(".env") and path.name != ".env.example") or low.endswith(PRIVATE_SUFFIXES) or low.startswith("data/") and name != "data/README.md":
             problems.append(f"{name}: private data / credential filename")
         file = root / path
