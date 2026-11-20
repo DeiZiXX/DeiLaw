@@ -1,0 +1,97 @@
+name: Inspect original audio in historical DeiLaw releases
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/recover-legacy-audio.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Download historical official installers
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP 'deilaw-older-installs'
+          New-Item -ItemType Directory -Force $target | Out-Null
+          foreach ($version in @('v0.3.0','v0.2.2','v0.2.0')) {
+            $dir = Join-Path $target $version
+            New-Item -ItemType Directory -Force $dir | Out-Null
+            gh release download $version -R DeiZiXX/DeiLaw --pattern "DeiLaw_Setup_$version.exe" --dir $dir
+            if ($LASTEXITCODE -ne 0) { throw "Download failed: $version" }
+            $path = Join-Path $dir "DeiLaw_Setup_$version.exe"
+            if (!(Test-Path -LiteralPath $path)) { throw "Missing original installer: $version" }
+            Write-Host "ORIGINAL $version SHA256:" (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash
+          }
+      - name: Install PyInstaller archive reader for offline extraction
+        shell: pwsh
+        run: python -m pip install --disable-pip-version-check PyInstaller==6.22.3
+      - name: Extract only into disposable runner; do not launch DeiLaw
+        shell: pwsh
+        run: |
+          $source = Join-Path $env:RUNNER_TEMP 'deilaw-older-installs'
+          $out = Join-Path $env:RUNNER_TEMP 'deilaw-original-audio'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          $recs = @()
+          foreach ($version in @('v0.3.0','v0.2.2','v0.2.0')) {
+            $installer = Join-Path (Join-Path $source $version) "DeiLaw_Setup_$version.exe"
+            $dest = Join-Path (Join-Path $source $version) 'installed-files'
+            New-Item -ItemType Directory -Force $dest | Out-Null
+            $log = Join-Path $out "$version-install.log"
+            $args = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/NOICONS',"/DIR=$dest","/LOG=$log")
+            $exit = -1
+            try {
+              $p = Start-Process -FilePath $installer -ArgumentList $args -Wait -PassThru -ErrorAction Stop
+              $exit = $p.ExitCode
+            } catch {
+              Write-Host "$version install error: $($_.Exception.Message)"
+            }
+            Write-Host "$version installer exit code: $exit"
+            $files = @(Get-ChildItem -LiteralPath $dest -File -Recurse -ErrorAction SilentlyContinue)
+            $direct = @()
+            foreach ($f in $files) {
+              if ($f.Extension -match '(?i)^(\.wav|\.ogg|\.mp3|\.flac)$') {
+                $rel = $f.FullName.Substring($dest.Length).TrimStart('\','/')
+                $copy = Join-Path (Join-Path $out $version) $rel
+                New-Item -ItemType Directory -Force (Split-Path -Parent $copy) | Out-Null
+                Copy-Item -LiteralPath $f.FullName -Destination $copy
+                $direct += @{name=$rel;bytes=$f.Length;sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $f.FullName).Hash}
+                Write-Host "FOUND DIRECT SOUND $version : $rel"
+              }
+            }
+            $pyi = @()
+            foreach ($f in $files) {
+              if ($f.Extension -eq '.exe' -and $f.Length -gt 500000) {
+                Write-Host "INSPECTING PyInstaller payload $version : $($f.Name)"
+                $extractDir = Join-Path (Join-Path $out $version) ('pyinstaller-' + $f.BaseName)
+                python scripts/extract_historical_audio.py "$($f.FullName)" "$extractDir"
+                if ($LASTEXITCODE -eq 0) {
+                  $pyi += @((Get-ChildItem -LiteralPath $extractDir -Recurse -File -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name))
+                }
+              }
+            }
+            Write-Host "VERSION $version : installed files=$($files.Count), direct audio=$($direct.Count), PyInstaller audio=$($pyi.Count)"
+            $recs += @{version=$version;installer_exit_code=$exit;installed_files=$files.Count;direct_audio=$direct;pyinstaller_audio=$pyi}
+          }
+          $inventory = Join-Path $out 'inventory.json'
+          $recs | ConvertTo-Json -Depth 8 | Out-File -FilePath $inventory -Encoding utf8
+          Get-Content $inventory
+      - name: Save extracted WAV files and inventory for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-deilaw-audio
+          path: ${{ runner.temp }}/deilaw-original-audio/
+          if-no-files-found: warn
+          retention-days: 7
