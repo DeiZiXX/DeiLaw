@@ -5,6 +5,12 @@ import unittest
 from urllib.parse import urlsplit
 
 import requests
+
+# Test only the 127.0.0.1 challenge server. Host/runner proxy settings must not
+# redirect the test request to a corporate proxy or external endpoint.
+LOCAL_HTTP = requests.Session()
+LOCAL_HTTP.trust_env = False
+
 from turnstile_browser import get_turnstile_token, CaptchaChallengeError
 
 
@@ -14,11 +20,11 @@ class TestTurnstileBrowser(unittest.TestCase):
         def fake_open(url):
             seen.append(url)
             def complete():
-                resp = requests.get(url, timeout=4)
+                resp = LOCAL_HTTP.get(url, timeout=4)
                 self.assertEqual(resp.status_code, 200)
                 self.assertIn('https://challenges.cloudflare.com/turnstile/v0/api.js', resp.text)
                 self.assertIn('Content-Security-Policy', resp.headers)
-                finished = requests.post(url+'/finish', data={'cf-turnstile-response':'signed-test-token'},timeout=4)
+                finished = LOCAL_HTTP.post(url+'/finish', data={'cf-turnstile-response':'signed-test-token'},timeout=4)
                 self.assertEqual(finished.status_code, 200)
             threading.Thread(target=complete, daemon=True).start()
             return True
@@ -39,10 +45,10 @@ class TestTurnstileBrowser(unittest.TestCase):
     def test_wrong_origin_cannot_submit(self):
         def fake_open(url):
             def complete():
-                rejected=requests.post(url+'/finish',data={'cf-turnstile-response':'blocked'},
+                rejected=LOCAL_HTTP.post(url+'/finish',data={'cf-turnstile-response':'blocked'},
                             headers={'Origin':'https://evil.example'},timeout=4)
                 self.assertEqual(rejected.status_code,403)
-                accepted=requests.post(url+'/finish',data={'cf-turnstile-response':'signed-token'},timeout=4)
+                accepted=LOCAL_HTTP.post(url+'/finish',data={'cf-turnstile-response':'signed-token'},timeout=4)
                 self.assertEqual(accepted.status_code,200)
             threading.Thread(target=complete,daemon=True).start()
             return True
