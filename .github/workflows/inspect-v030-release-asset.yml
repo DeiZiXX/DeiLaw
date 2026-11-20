@@ -37,6 +37,17 @@ jobs:
           print("Installer name:",str(data.get("installer_asset",""))[:120])
           print("Has signature field:",bool(data.get("signature_ed25519")))
           PY
+      - name: Extract old Inno Setup offline without running it
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq innoextract
+          innoextract --list original-v030/DeiLaw_Setup_v0.3.0.exe > original-v030/inno-filelist.txt
+          mkdir -p extracted
+          innoextract --extract --output-dir extracted original-v030/DeiLaw_Setup_v0.3.0.exe
+          find extracted -type f -printf '%p %s bytes\n' > original-v030/extracted-filelist.txt
+          find extracted -type f \( -iname 'DeiLaw.exe' -o -iname 'updater.py' -o -iname 'update_config.json' -o -iname '*update*manifest*' \) -exec cp -v '{}' original-v030/ \;
+          echo "Extraction completed, no binary executed."
       - name: Upload exact historical assets for offline static inspection
         uses: actions/upload-artifact@v4
         with:
