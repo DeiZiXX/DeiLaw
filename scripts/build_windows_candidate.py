@@ -99,6 +99,45 @@ def nsis_compiler() -> str | None:
                  (Path(p).is_file() or shutil.which(str(p)))), None)
 
 
+def prepare_installer_brand_bitmaps() -> tuple[Path, Path]:
+    """Create branded NSIS MUI bitmaps from original DeiLaw installer artwork.
+
+    Uses PyQt6 bundled for the app. Generated BMPs stay in build/, not the
+    source repository or third-party dependencies.
+    """
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtGui import QImage
+
+    pages = ROOT / "installer" / "assets" / "pages"
+    output_dir = ROOT / "build" / "installer-brand"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    results = []
+    for filename, size, output in (
+        ("back_welcome.png", (164, 314), "welcome.bmp"),
+        ("back_ready.png", (150, 57), "header.bmp"),
+    ):
+        src = pages / filename
+        require(src, "DeiLaw branded installer art")
+        original = QImage(str(src))
+        if original.isNull():
+            raise RuntimeError(f"Cannot read installer image: {src}")
+        scaled = original.scaled(
+            size[0], size[1],
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        offset_x = max(0, (scaled.width() - size[0]) // 2)
+        offset_y = max(0, (scaled.height() - size[1]) // 2)
+        bitmap = scaled.copy(offset_x, offset_y, size[0], size[1]).convertToFormat(
+            QImage.Format.Format_RGB888
+        )
+        dest = output_dir / output
+        if not bitmap.save(str(dest), "BMP") or dest.stat().st_size < 1000:
+            raise RuntimeError(f"Could not generate branded bitmap: {dest}")
+        results.append(dest)
+    return results[0], results[1]
+
+
 def package_nsis(exe: Path, require_installer: bool, require_git: bool) -> None:
     compiler = nsis_compiler()
     if not compiler:
@@ -108,8 +147,11 @@ def package_nsis(exe: Path, require_installer: bool, require_git: bool) -> None:
         return
     release = ROOT / "release"
     release.mkdir(parents=True, exist_ok=True)
+    welcome_bitmap, header_bitmap = prepare_installer_brand_bitmaps()
     invoke(
         compiler, "/INPUTCHARSET", "UTF8", "/V2",
+        f"/DDEILAW_WELCOME_BMP={welcome_bitmap}",
+        f"/DDEILAW_HEADER_BMP={header_bitmap}",
         f"/DAPP_VERSION={APP_VERSION}",
         f"/DDEILAW_SOURCE={ROOT / 'dist' / 'DeiLaw'}",
         f"/DDEILAW_OUTPUT={release}",
