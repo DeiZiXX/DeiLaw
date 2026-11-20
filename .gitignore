@@ -31,6 +31,8 @@ dist/
 *.7z
 *.exe
 *.msi
+# Legacy Windows batch launchers are not part of the public source release.
+*.bat
 # Security backup exports and audit evidence
 *.dump.gpg
 *.tar.gpg

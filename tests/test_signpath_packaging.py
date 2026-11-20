@@ -21,12 +21,12 @@ class PackagingChecks(unittest.TestCase):
         self.assertIn('"/S"', (ROOT/'updater.py').read_text(encoding='utf-8'))
 
     def test_nsis_utf8_cyrillic_and_legacy_inno_guard(self):
-        build = (ROOT / 'scripts/build_signpath_candidate.ps1').read_text(encoding='utf-8')
+        build = (ROOT / 'scripts/build_windows_candidate.py').read_text(encoding='utf-8')
         installer = (ROOT / 'installer/DeiLaw.nsi').read_text(encoding='utf-8')
-        self.assertIn('"/INPUTCHARSET" "UTF8"', build)
-        self.assertIn('scripts\\review_windows_bundle.py', build)
-        self.assertIn("$AppMeta.ProductName -ne 'DeiLaw'", build)
-        self.assertIn('$AppMeta.ProductVersion -ne $Version', build)
+        self.assertIn('"/INPUTCHARSET", "UTF8"', build)
+        self.assertIn('"review_windows_bundle.py"', build)
+        self.assertIn("$m.ProductName -cne 'DeiLaw'", build)
+        self.assertIn('$m.ProductVersion -cne', build)
         self.assertIn('Unicode true', installer)
         self.assertIn('Обнаружена прежняя версия DeiLaw', installer)
         self.assertIn('IfFileExists "$INSTDIR\\unins000.exe"', installer)

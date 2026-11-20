@@ -36,7 +36,7 @@ python main.py
 Для создания неподписанного Windows-кандидата с установленным NSIS:
 
 ```powershell
-.\scripts\build_signpath_candidate.ps1
+python scripts/build_windows_candidate.py
 ```
 
 Автоматические Windows-тесты ранее подтвердили успешные 118/118 проверок исходников и smoke-test установки/удаления: [GitHub Actions #44166176466](https://github.com/DeiZiXX/DeiLaw/actions/runs/44166176466). Это подтверждает только протестированный коммит; при новом `main` результаты надо проверить повторно.

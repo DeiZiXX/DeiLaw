@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -14,6 +15,7 @@ def git(root: Path, *args: str) -> None:
     subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
 
 
+@unittest.skipUnless(shutil.which("git"), "Git not installed: commit provenance tests run in GitHub CI")
 class TestSourceSnapshot(unittest.TestCase):
     def create_repo(self, root: Path) -> None:
         (root / ".github" / "workflows").mkdir(parents=True)

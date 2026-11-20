@@ -6,6 +6,7 @@ This is a high-confidence accidental-secret screen, not a penetration test.
 """
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -54,13 +55,36 @@ SECRET_PATTERNS = {
 }
 
 def tracked_files(root: Path = ROOT) -> list[str]:
-    proc = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "-z"],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
-    )
+    # A downloaded GitHub ZIP has no .git metadata; only a real checkout may
+    # claim that its source was verified against a Git commit.
+    if not (root / ".git").exists():
+        raise RuntimeError("No Git metadata: cannot approve a commit-bound public release")
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+        )
+    except OSError as exc:
+        raise RuntimeError("Git executable is unavailable: cannot approve public release") from exc
     if proc.returncode:
         raise RuntimeError("Git tracked file inventory unavailable: cannot approve public release")
     return sorted(n.decode("utf-8", "surrogateescape") for n in proc.stdout.split(b"\0") if n)
+
+
+def archive_files(root: Path = ROOT) -> list[str]:
+    """Inspect source ZIP contents without falsely asserting Git provenance."""
+    ignored = {".git", ".venv", "venv", "build", "dist", "release",
+               "__pycache__", ".pytest_cache", ".mypy_cache"}
+    found = []
+    for directory, dirs, filenames in os.walk(root, followlinks=False):
+        dirs[:] = [d for d in dirs if d not in ignored and not
+                   (Path(directory) / d).is_symlink()]
+        for filename in filenames:
+            file = Path(directory) / filename
+            if file.is_symlink():
+                raise RuntimeError("Symlink in untrusted source archive")
+            found.append(file.relative_to(root).as_posix())
+    return sorted(found)
 
 def violations(root: Path, names: list[str]) -> list[str]:
     problems: list[str] = []
@@ -72,6 +96,8 @@ def violations(root: Path, names: list[str]) -> list[str]:
         low = name.lower()
         if name in NONPUBLIC_PATHS:
             problems.append(f"{name}: internal operations file in public release")
+        if path.suffix.lower() == ".bat":
+            problems.append(f"{name}: batch script forbidden in public release")
         if (path.name.startswith(".env") and path.name != ".env.example") or low.endswith(PRIVATE_SUFFIXES) or low.startswith("data/") and name != "data/README.md":
             problems.append(f"{name}: private data / credential filename")
         file = root / path
@@ -92,7 +118,8 @@ def violations(root: Path, names: list[str]) -> list[str]:
 
 def main() -> int:
     try:
-        names = tracked_files()
+        is_archive = "--scan-source-tree" in sys.argv
+        names = archive_files() if is_archive else tracked_files()
         problems = violations(ROOT, names)
     except (OSError, RuntimeError) as exc:
         print(f"Public source audit failed to run: {exc}", file=sys.stderr)
@@ -102,7 +129,10 @@ def main() -> int:
         for problem in problems:
             print(f"[REDACTED] {problem}", file=sys.stderr)
         return 1
-    print(f"Public source audit passed: {len(names)} tracked files; no forbidden operational files or high-confidence secrets.")
+    if is_archive:
+        print(f"Local ZIP source scan passed: {len(names)} files; NO Git commit provenance claimed.")
+    else:
+        print(f"Public source audit passed: {len(names)} tracked files; no forbidden operational files or high-confidence secrets.")
     print("Note: public Supabase URL and publishable key are not secrets. Verify RLS and permissions independently.")
     return 0
 

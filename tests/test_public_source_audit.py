@@ -2,8 +2,9 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from scripts.audit_public_source import violations, tracked_files
+from scripts.audit_public_source import archive_files, violations, tracked_files
 
 
 class PublicSourceAuditTests(unittest.TestCase):
@@ -16,6 +17,12 @@ class PublicSourceAuditTests(unittest.TestCase):
                 encoding="utf-8",
             )
             self.assertEqual(violations(root, ["client.py"]), [])
+
+    def test_blocks_batch_scripts(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "start.bat").write_text("@echo off", encoding="utf-8")
+            self.assertTrue(any("batch script forbidden" in issue for issue in violations(root, ["start.bat"])))
 
     def test_blocks_internal_operations_document(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -44,6 +51,24 @@ class PublicSourceAuditTests(unittest.TestCase):
                 p.write_text("redacted", encoding="utf-8")
             found = violations(root, ["my_token.pem", "data/identity.db", ".env"])
             self.assertEqual(sum("private data" in issue for issue in found), 3)
+
+    def test_missing_git_binary_is_reported_without_windows_traceback(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / ".git").mkdir()
+            with patch("scripts.audit_public_source.subprocess.run", side_effect=FileNotFoundError(2, "The system cannot find the file specified", "git")):
+                with self.assertRaisesRegex(RuntimeError, "Git executable is unavailable"):
+                    tracked_files(root)
+
+    def test_source_zip_scan_works_without_git(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "main.py").write_text("print('hello')", encoding="utf-8")
+            (root / ".venv" / "Scripts").mkdir(parents=True)
+            (root / ".venv" / "Scripts" / "activate.bat").write_text("ignored", encoding="utf-8")
+            names = archive_files(root)
+            self.assertEqual(names, ["main.py"])
+            self.assertEqual(violations(root, names), [])
 
     def test_fails_closed_without_git_metadata(self):
         with tempfile.TemporaryDirectory() as temp:
