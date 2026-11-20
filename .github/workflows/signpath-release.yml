@@ -93,7 +93,7 @@ jobs:
           Copy-Item $source[0].FullName dist\DeiLaw\DeiLaw.exe -Force
       - name: Package NSIS setup containing signed app
         shell: pwsh
-        run: .\scripts\build_signpath_candidate.ps1 -SkipAppBuild
+        run: python scripts/build_windows_candidate.py --skip-app-build --require-installer --require-git-provenance
       - name: Smoke-test packaged setup before submitting it to SignPath
         shell: pwsh
         run: .\scripts\test_nsis_install.ps1 -Installer .\release\DeiLaw_Setup_v0.3.1.exe
