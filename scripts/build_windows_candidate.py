@@ -150,6 +150,13 @@ def main() -> int:
     args = parser.parse_args()
     if os.name != "nt":
         parser.error("Windows is required for this build")
+    # A downloaded GitHub ZIP must build in its own isolated venv; never
+    # install project dependencies into the user's global Python.
+    venv_python = ROOT / ".venv" / "Scripts" / "python.exe"
+    if Path(sys.executable).resolve() != venv_python.resolve():
+        if not venv_python.is_file():
+            invoke(sys.executable, "-m", "venv", str(ROOT / ".venv"))
+        return subprocess.call([str(venv_python), str(Path(__file__)), *sys.argv[1:]], cwd=ROOT)
     if args.skip_app_build and args.app_only:
         parser.error("--skip-app-build cannot be combined with --app-only")
     try:
