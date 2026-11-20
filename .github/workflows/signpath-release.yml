@@ -55,7 +55,7 @@ jobs:
           python -m venv .venv
       - name: Build unsigned application
         shell: pwsh
-        run: .\build_app_only.ps1
+        run: python scripts/build_windows_candidate.py --app-only --require-git-provenance
       - name: Audit actual Windows bundle notices (technical integrity only)
         shell: pwsh
         run: |
