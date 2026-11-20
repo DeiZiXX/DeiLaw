@@ -56,7 +56,7 @@ jobs:
         run: python -m venv .venv
       - name: Build unsigned candidate and create exact source snapshot
         shell: pwsh
-        run: .\scripts\build_signpath_candidate.ps1
+        run: python scripts/build_windows_candidate.py --require-installer --require-git-provenance
       - name: Verify NSIS install, reinstall and uninstall
         shell: pwsh
         run: .\scripts\test_nsis_install.ps1 -Installer .\release\DeiLaw_Setup_v0.3.1.exe
