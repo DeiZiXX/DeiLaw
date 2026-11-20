@@ -22,8 +22,8 @@ class PublicVersionMetadataTests(unittest.TestCase):
         self.assertIn("StringStruct(u'ProductVersion', u'0.3.1')", info)
 
     def test_build_scripts_embed_version_info(self):
-        script = (ROOT / "build_app_only.ps1").read_text(encoding="utf-8")
-        self.assertIn('--version-file', script)
+        script = (ROOT / "scripts/build_windows_candidate.py").read_text(encoding="utf-8")
+        self.assertIn('"--version-file"', script)
         self.assertIn('version_info.txt', script)
 
     def test_current_docs(self):
