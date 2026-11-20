@@ -10,13 +10,13 @@ from security.backup_encrypted import prerequisites
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 
 class TestReleaseGate(unittest.TestCase):
- def test_powershell_signs_inner_exe_and_installer(self):
-  code=(ROOT/'build_release.ps1').read_text('utf-8')
-  self.assertIn("dist\\DeiLaw\\DeiLaw.exe",code)
-  self.assertIn("& $SignTool sign /sha1 $CertificateThumbprint",code)
-  self.assertEqual(code.count('SignTool sign /sha1'),2)
-  self.assertEqual(code.count('SignTool verify /pa /v'),2)
-  self.assertNotIn('http://timestamp.digicert.com',code)
+ def test_signpath_workflow_signs_inner_exe_and_installer(self):
+  code=(ROOT/'.github/workflows/signpath-release.yml').read_text('utf-8')
+  self.assertIn("dist/DeiLaw/DeiLaw.exe",code)
+  self.assertEqual(code.count('uses: signpath/github-action-submit-signing-request@v3'),2)
+  self.assertEqual(code.count('Expected SignPath Foundation Authenticode signer'),2)
+  self.assertIn('manual release approval',code)
+  self.assertIn('--require-git-provenance',code)
  def test_release_without_key_fails_closed(self):
   from update_trust import verify_manifest,UntrustedUpdateError
   import update_trust
