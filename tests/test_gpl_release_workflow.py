@@ -21,7 +21,7 @@ class GPLReleaseWorkflowTests(unittest.TestCase):
 
     def test_must_prove_binary_source_provenance_and_test_install(self):
         workflow = (ROOT / ".github/workflows/gpl-release-draft.yml").read_text(encoding="utf-8")
-        self.assertIn("build_signpath_candidate.ps1", workflow)
+        self.assertIn("python scripts/build_windows_candidate.py --require-installer --require-git-provenance", workflow)
         self.assertIn("test_nsis_install.ps1", workflow)
         self.assertIn("source_archive_sha256", workflow)
         self.assertIn("unsigned_installer_sha256", workflow)
