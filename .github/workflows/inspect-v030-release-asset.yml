@@ -1,0 +1,46 @@
+# Temporary owner-authorized, read-only inspection of published v0.3.0 artifacts.
+# Downloads publicly released files ONLY. Does not execute any downloaded binary,
+# mutate GitHub releases, use signing keys, or touch production Supabase.
+name: Inspect historical DeiLaw v0.3.0 release assets
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/inspect-v030-release-asset.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  download-legacy-release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Download public GitHub v0.3.0 installer and manifest (never execute)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p original-v030
+          gh release download v0.3.0 --repo DeiZiXX/DeiLaw --dir original-v030 \
+            --pattern 'DeiLaw_Setup_v0.3.0.exe' --pattern 'update_manifest.json'
+          test -s original-v030/DeiLaw_Setup_v0.3.0.exe
+          test -s original-v030/update_manifest.json
+          (cd original-v030 && sha256sum DeiLaw_Setup_v0.3.0.exe update_manifest.json > sha256.txt)
+          file original-v030/DeiLaw_Setup_v0.3.0.exe
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("original-v030/update_manifest.json")
+          data=json.loads(p.read_text(encoding="utf-8-sig"))
+          print("Manifest keys:",sorted(data))
+          print("Version:",str(data.get("version",""))[:40])
+          print("Installer name:",str(data.get("installer_asset",""))[:120])
+          print("Has signature field:",bool(data.get("signature_ed25519")))
+          PY
+      - name: Upload exact historical assets for offline static inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: deilaw-v030-original-release-asset-static-inspection
+          path: original-v030/
+          if-no-files-found: error
+          retention-days: 1
